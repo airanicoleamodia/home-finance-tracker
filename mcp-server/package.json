@@ -1,0 +1,14 @@
+{
+  "name": "home-finance-mcp",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MCP server exposing the Home Finance Tracker to Claude (read + add/edit).",
+  "bin": { "home-finance-mcp": "server.js" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@supabase/supabase-js": "^2.45.4"
+  }
+}

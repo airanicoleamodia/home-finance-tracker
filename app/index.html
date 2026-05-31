@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f766e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Finance" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <title>Home Finance Tracker</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script type="module">
+      // Register the offline service worker ONLY in production builds.
+      // In `npm run dev`, import.meta.env.DEV is true, so we skip it AND
+      // remove any worker registered earlier — otherwise it serves a stale
+      // cached page and your code changes won't show up.
+      if (import.meta.env && import.meta.env.PROD) {
+        if ("serviceWorker" in navigator) {
+          window.addEventListener("load", () =>
+            navigator.serviceWorker.register("/sw.js").catch(() => {})
+          );
+        }
+      } else if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) =>
+          regs.forEach((r) => r.unregister())
+        );
+      }
+    </script>
+  </body>
+</html>
