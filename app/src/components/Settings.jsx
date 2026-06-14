@@ -147,9 +147,23 @@ export default function Settings({ session, categories, members, onChange }) {
     } catch (e) { alert(e.message); }
   }
   const accNameById = (id) => accounts.find((a) => a.id === id)?.name || "";
-  async function clearAll() {
-    if (!confirm("Delete ALL local data on this device? This cannot be undone.")) return;
-    await api.clearAll(); onChange();
+  function reloadLists() { loadAccounts(); loadRecs(); loadRecExp(); }
+
+  async function resetData() {
+    if (prompt("This deletes ALL transactions (expenses, income, transfers, recurring rules, budgets) and resets every account balance to 0.\n\nYour accounts, categories and people are kept.\n\nType RESET to confirm.") !== "RESET") return;
+    setBusy(true);
+    try { await api.resetData(); reloadLists(); onChange(); alert("Done — your household is starting fresh."); }
+    catch (e) { alert(e.message); }
+    finally { setBusy(false); }
+  }
+  async function factoryReset() {
+    if (prompt("This ERASES EVERYTHING — all transactions, your custom accounts and categories — and restores the default setup.\n\nType ERASE to confirm.") !== "ERASE") return;
+    setBusy(true);
+    try {
+      await (api.factoryReset ? api.factoryReset() : api.clearAll());
+      reloadLists(); onChange(); alert("Everything erased. The app is back to a clean default state.");
+    } catch (e) { alert(e.message); }
+    finally { setBusy(false); }
   }
   async function signOut() { await api.signOut(); location.reload(); }
 
@@ -297,9 +311,28 @@ export default function Settings({ session, categories, members, onChange }) {
         </div>
         <button className="btn ghost" onClick={exportCSV}>⬇️ Export CSV</button>
         <button className="btn ghost" onClick={exportBackup}>⬇️ Export backup (.json)</button>
-        {MODE === "local"
-          ? <button className="btn danger" onClick={clearAll}>Clear all data</button>
-          : <button className="btn ghost" onClick={signOut}>Sign out</button>}
+        {MODE === "cloud" && <button className="btn ghost" onClick={signOut}>Sign out</button>}
+      </div>
+
+      <div className="section-h" style={{ color: "var(--danger)" }}>⚠️ Danger zone</div>
+      <div className="card" style={{ padding: 16, borderColor: "var(--danger)" }}>
+        <div style={{ fontWeight: 700, fontSize: 14.5 }}>Reset data (start fresh)</div>
+        <div className="hint" style={{ margin: "4px 0 10px" }}>
+          Deletes every transaction and zeroes account balances, but keeps your accounts, categories and people. Good for a clean new month or year.
+        </div>
+        <button className="btn danger" onClick={resetData} disabled={busy}>Reset data</button>
+
+        <div style={{ fontWeight: 700, fontSize: 14.5, marginTop: 18 }}>Erase everything</div>
+        <div className="hint" style={{ margin: "4px 0 10px" }}>
+          Removes ALL data including your custom accounts and categories, then restores the default setup. The household{MODE === "cloud" ? " and everyone's logins stay" : " stays"} intact.
+        </div>
+        <button className="btn danger" onClick={factoryReset} disabled={busy}>Erase everything</button>
+
+        {MODE === "cloud" && (
+          <div className="hint" style={{ marginTop: 16 }}>
+            Note: permanently deleting the whole household and member logins must be done from your Supabase dashboard — it can't be undone and isn't available in-app for safety.
+          </div>
+        )}
       </div>
 
       <div className="hint" style={{ textAlign: "center", marginTop: 18 }}>

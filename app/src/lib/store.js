@@ -316,6 +316,15 @@ const localApi = {
       budgets: L.budgets,
     };
   },
+  // Danger zone: wipe transactions + zero balances, but keep accounts/categories/people.
+  async resetData() {
+    L.expenses = []; L.income = []; L.transfers = [];
+    L.recurring_income = []; L.recurring_expenses = []; L.budgets = [];
+    (L.accounts || []).forEach((a) => { a.balance = 0; });
+    lsave();
+  },
+  // Danger zone: full factory reset (also removes custom accounts/categories), restores defaults.
+  async factoryReset() { localStorage.removeItem(LKEY); L = readStore(); },
   async clearAll() { localStorage.removeItem(LKEY); L = readStore(); },
 };
 
@@ -625,6 +634,34 @@ const cloudApi = {
     const out = {};
     tables.forEach((t, i) => { out[t] = results[i].data || []; });
     return out;
+  },
+  // Danger zone: wipe transactions + zero balances, keep accounts/categories/people.
+  async resetData() {
+    const hid = await householdId();
+    const tables = ["expenses", "income", "transfers", "recurring_income", "recurring_expenses", "budgets"];
+    for (const t of tables) {
+      const { error } = await supabase.from(t).delete().eq("household_id", hid);
+      if (error) throw error;
+    }
+    const { error } = await supabase.from("accounts").update({ balance: 0 }).eq("household_id", hid);
+    if (error) throw error;
+  },
+  // Danger zone: erase ALL data (incl. custom accounts/categories) and restore defaults.
+  async factoryReset() {
+    const hid = await householdId();
+    const tables = ["expenses", "income", "transfers", "recurring_income", "recurring_expenses", "budgets", "accounts", "categories"];
+    for (const t of tables) {
+      const { error } = await supabase.from(t).delete().eq("household_id", hid);
+      if (error) throw error;
+    }
+    await supabase.from("categories").insert(
+      DEFAULT_CATS.map((c) => ({ household_id: hid, name: c.name, icon: c.icon, color: c.color, sort_order: c.sort_order, is_default: c.is_default }))
+    );
+    await supabase.from("accounts").insert([
+      { household_id: hid, name: "Cash on hand", icon: "💵", balance: 0, sort_order: 10 },
+      { household_id: hid, name: "Bank", icon: "🏦", balance: 0, sort_order: 20 },
+      { household_id: hid, name: "E-wallet", icon: "📱", balance: 0, sort_order: 30 },
+    ]);
   },
   async clearAll() { throw new Error("Cloud data is shared — delete items individually."); },
 };

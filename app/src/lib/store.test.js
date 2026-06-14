@@ -188,3 +188,26 @@ describe("transfers (local mode)", () => {
     expect(fees).toHaveLength(0);
   });
 });
+
+describe("danger zone (local mode)", () => {
+  beforeEach(async () => { await api.clearAll(); });
+
+  it("resetData clears transactions, zeroes balances, and keeps accounts", async () => {
+    await api.addIncome({ amount: 1000, received_on: "2026-06-01", account_id: "a1" });
+    await api.addExpense({ amount: 100, spent_on: "2026-06-02", account_id: "a0" });
+    await api.resetData();
+    expect(await api.getExpenses("2026-06")).toHaveLength(0);
+    expect(await api.getIncome("2026-06")).toHaveLength(0);
+    const accounts = await api.getAccounts();
+    expect(accounts.length).toBeGreaterThan(0);     // accounts kept
+    expect(accounts.every((a) => a.balance === 0)).toBe(true); // balances zeroed
+  });
+
+  it("factoryReset wipes data and restores default accounts", async () => {
+    await api.addAccount({ name: "Crypto", icon: "🪙", balance: 500 });
+    await api.factoryReset();
+    const accounts = await api.getAccounts();
+    expect(accounts.some((a) => a.name === "Crypto")).toBe(false); // custom account gone
+    expect(accounts.length).toBe(3);                                // defaults restored
+  });
+});
