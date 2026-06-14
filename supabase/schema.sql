@@ -95,6 +95,18 @@ create table if not exists budgets (
 );
 create index if not exists budgets_household_idx on budgets(household_id);
 
+-- Money locations with a manually-maintained balance (banks, e-wallets, cash…).
+create table if not exists accounts (
+  id            uuid primary key default gen_random_uuid(),
+  household_id  uuid not null references households(id) on delete cascade,
+  name          text not null default 'Account',
+  icon          text not null default '🏦',
+  balance       numeric(12,2) not null default 0,
+  sort_order    int  not null default 100,
+  created_at    timestamptz not null default now()
+);
+create index if not exists accounts_household_idx on accounts(household_id);
+
 -- ---------- Helper: current user's household ----------
 create or replace function current_household_id()
 returns uuid
@@ -112,6 +124,7 @@ alter table expenses   enable row level security;
 alter table budgets    enable row level security;
 alter table income            enable row level security;
 alter table recurring_income  enable row level security;
+alter table accounts          enable row level security;
 
 -- households: members can see + update their own household
 drop policy if exists hh_select on households;
@@ -158,6 +171,11 @@ create policy recinc_all on recurring_income for all
   using (household_id = current_household_id())
   with check (household_id = current_household_id());
 
+drop policy if exists acc_all on accounts;
+create policy acc_all on accounts for all
+  using (household_id = current_household_id())
+  with check (household_id = current_household_id());
+
 -- ---------- New-user bootstrap ----------
 -- When a user signs up: create a household (or join one via invite metadata)
 -- and a profile, then seed the 10 standard categories.
@@ -197,6 +215,12 @@ begin
       (hh,'Kids / School','🎒','#db2777',80,true),
       (hh,'Leisure','🎬','#9333ea',90,true),
       (hh,'Other','📦','#6b7280',100,true);
+
+    -- Seed common money locations (balances start at 0, fully editable).
+    insert into accounts (household_id, name, icon, balance, sort_order) values
+      (hh,'Cash on hand','💵',0,10),
+      (hh,'Bank','🏦',0,20),
+      (hh,'E-wallet','📱',0,30);
   end if;
 
   return new;

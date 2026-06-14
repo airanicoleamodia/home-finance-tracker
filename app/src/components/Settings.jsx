@@ -2,10 +2,45 @@ import { useState, useEffect } from "react";
 import { api, MODE } from "../lib/store.js";
 import { CURRENCY, fmt, hexA } from "../lib/format.js";
 
+const ACCOUNT_ICONS = ["💵", "🏦", "📱", "🐷", "💳", "💰", "📦"];
+
 export default function Settings({ session, categories, members, onChange }) {
   const [newPerson, setNewPerson] = useState("");
   const [newCat, setNewCat] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // accounts (money locations, manual balances)
+  const [accounts, setAccounts] = useState([]);
+  const [aName, setAName] = useState("");
+  const [aIcon, setAIcon] = useState("🏦");
+  const [aBal, setABal] = useState("");
+
+  async function loadAccounts() {
+    try { setAccounts(await api.getAccounts()); } catch { setAccounts([]); }
+  }
+  useEffect(() => { loadAccounts(); }, []);
+
+  async function addAccount() {
+    if (!aName.trim()) { alert("Name the account (e.g. BPI, GCash, Cash)."); return; }
+    const bal = parseFloat(String(aBal).replace(/[^0-9.]/g, "")) || 0;
+    setBusy(true);
+    try {
+      await api.addAccount({ name: aName.trim(), icon: aIcon, balance: bal });
+      setAName(""); setABal(""); setAIcon("🏦");
+      await loadAccounts(); onChange();
+    } catch (e) { alert(e.message); }
+    finally { setBusy(false); }
+  }
+  async function saveAccount(id, patch) {
+    try { await api.updateAccount(id, patch); await loadAccounts(); onChange(); }
+    catch (e) { alert(e.message); }
+  }
+  async function delAccount(id) {
+    if (!confirm("Remove this account?")) return;
+    try { await api.deleteAccount(id); await loadAccounts(); onChange(); }
+    catch (e) { alert(e.message); }
+  }
+  const accTotal = accounts.reduce((s, a) => s + Number(a.balance || 0), 0);
 
   // recurring income
   const [recs, setRecs] = useState([]);
@@ -97,6 +132,35 @@ export default function Settings({ session, categories, members, onChange }) {
         <div className="hint">e.g. ₱30,000 Salary on day 15 — auto-counted every month.</div>
       </div>
 
+      <div className="section-h">
+        Accounts (where your money is)
+        {accounts.length > 0 && <span className="pill">{fmt(accTotal)}</span>}
+      </div>
+      <div className="card" style={{ padding: "6px 16px 16px" }}>
+        {accounts.length === 0 && (
+          <div className="hint" style={{ padding: "10px 0" }}>
+            Add your banks, e-wallets and cash so you can see where your money sits. You keep each balance up to date here.
+          </div>
+        )}
+        {accounts.map((a) => (
+          <AccountRow key={a.id} a={a} onSave={saveAccount} onDelete={delAccount} />
+        ))}
+        <label className="fl">Add an account</label>
+        <div className="chips">
+          {ACCOUNT_ICONS.map((ic) => (
+            <button type="button" key={ic}
+              className={"chip" + (ic === aIcon ? " sel" : "")}
+              onClick={() => setAIcon(ic)}>{ic}</button>
+          ))}
+        </div>
+        <div className="rec-grid" style={{ marginTop: 10 }}>
+          <input value={aName} maxLength={28} placeholder="Name (e.g. BPI, GCash)" onChange={(e) => setAName(e.target.value)} />
+          <input inputMode="decimal" placeholder={CURRENCY + " balance"} value={aBal} onChange={(e) => setABal(e.target.value)} />
+        </div>
+        <button className="btn" onClick={addAccount} disabled={busy} style={{ marginTop: 12 }}>Add account</button>
+        <div className="hint">These balances are manual — update them whenever money moves.</div>
+      </div>
+
       <div className="section-h">People <span className="pill">{members.length}</span></div>
       <div className="card" style={{ padding: "6px 16px 16px" }}>
         {members.map((m) => (
@@ -155,5 +219,36 @@ export default function Settings({ session, categories, members, onChange }) {
         Connect Claude via the MCP server (see README) to add &amp; query expenses by chat.
       </div>
     </>
+  );
+}
+
+// One editable account: change its name or balance inline (saved on blur).
+function AccountRow({ a, onSave, onDelete }) {
+  const [name, setName] = useState(a.name);
+  const [bal, setBal] = useState(String(a.balance));
+
+  // Keep local fields in sync if the list reloads with new values.
+  useEffect(() => { setName(a.name); setBal(String(a.balance)); }, [a.name, a.balance]);
+
+  const saveName = () => {
+    const v = name.trim();
+    if (v && v !== a.name) onSave(a.id, { name: v }); else setName(a.name);
+  };
+  const saveBal = () => {
+    const v = parseFloat(String(bal).replace(/[^0-9.]/g, "")) || 0;
+    if (v !== Number(a.balance)) onSave(a.id, { balance: v }); else setBal(String(a.balance));
+  };
+
+  return (
+    <div className="mgr-row">
+      <div className="ic" style={{ width: 32, height: 32, borderRadius: 9, fontSize: 16, background: "#f0f2f2", display: "flex", alignItems: "center", justifyContent: "center" }}>{a.icon}</div>
+      <input className="acc-name" value={name} maxLength={28}
+        onChange={(e) => setName(e.target.value)} onBlur={saveName}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
+      <input className="acc-bal-in" inputMode="decimal" value={bal}
+        onChange={(e) => setBal(e.target.value)} onBlur={saveBal}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
+      <button className="x" onClick={() => onDelete(a.id)}>✕</button>
+    </div>
   );
 }

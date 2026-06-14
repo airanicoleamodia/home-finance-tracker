@@ -45,9 +45,16 @@ function readStore() {
     budgets: [], // { id, category_id, month:'YYYY-MM', amount }
     income: [], // { id, amount, source, received_by, note, received_on }
     recurring_income: [], // { id, amount, source, day_of_month, received_by, note, active, start_month:'YYYY-MM' }
+    // Money locations with a manually-maintained balance (banks, e-wallets, cash…).
+    accounts: [
+      { id: "a0", name: "Cash on hand", icon: "💵", balance: 0, sort_order: 10 },
+      { id: "a1", name: "Bank", icon: "🏦", balance: 0, sort_order: 20 },
+      { id: "a2", name: "E-wallet", icon: "📱", balance: 0, sort_order: 30 },
+    ],
   };
 }
 let L = readStore();
+if (!L.accounts) L.accounts = []; // migrate stores saved before accounts existed
 function lsave() { localStorage.setItem(LKEY, JSON.stringify(L)); }
 
 // ----- shared helpers (used by both modes) -----
@@ -115,6 +122,26 @@ const localApi = {
     if (L.members.length <= 1) throw new Error("Keep at least one person.");
     L.members = L.members.filter((m) => m.id !== id); lsave();
   },
+
+  // ----- accounts (money locations, manual balances) -----
+  async getAccounts() {
+    return [...(L.accounts || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  },
+  async addAccount({ name, icon, balance }) {
+    const a = { id: uid(), name: name || "Account", icon: icon || "🏦",
+      balance: +balance || 0, sort_order: 100 + (L.accounts?.length || 0) };
+    L.accounts.push(a); lsave(); return a;
+  },
+  async updateAccount(id, patch) {
+    const a = L.accounts.find((x) => x.id === id);
+    if (a) {
+      if (patch.name != null) a.name = patch.name;
+      if (patch.icon != null) a.icon = patch.icon;
+      if (patch.balance != null) a.balance = +patch.balance || 0;
+    }
+    lsave(); return a;
+  },
+  async deleteAccount(id) { L.accounts = L.accounts.filter((x) => x.id !== id); lsave(); },
 
   async getExpenses(monthKey) {
     return L.expenses
@@ -262,6 +289,31 @@ const cloudApi = {
     throw new Error("In cloud mode, new people join by signing up with your household invite link.");
   },
   async removeMember() { throw new Error("Members manage their own accounts in cloud mode."); },
+
+  // ----- accounts (money locations, manual balances) -----
+  async getAccounts() {
+    const { data, error } = await supabase.from("accounts").select("*").order("sort_order");
+    if (error) throw error; return data || [];
+  },
+  async addAccount({ name, icon, balance }) {
+    const hid = await householdId();
+    const { data, error } = await supabase.from("accounts")
+      .insert({ household_id: hid, name: name || "Account", icon: icon || "🏦", balance: +balance || 0, sort_order: 100 })
+      .select().single();
+    if (error) throw error; return data;
+  },
+  async updateAccount(id, patch) {
+    const upd = {};
+    if (patch.name != null) upd.name = patch.name;
+    if (patch.icon != null) upd.icon = patch.icon;
+    if (patch.balance != null) upd.balance = +patch.balance || 0;
+    const { data, error } = await supabase.from("accounts").update(upd).eq("id", id).select().single();
+    if (error) throw error; return data;
+  },
+  async deleteAccount(id) {
+    const { error } = await supabase.from("accounts").delete().eq("id", id);
+    if (error) throw error;
+  },
 
   async getExpenses(monthKey) {
     const { data, error } = await supabase

@@ -12,15 +12,16 @@ export default function Dashboard({ cur, categories, refreshKey }) {
       api.getExpenses(monthKey),
       api.getIncome(monthKey),
       api.getMonthlyTotals(monthKey, 6),
+      api.getAccounts().catch(() => []), // non-fatal: DB migration may not be applied yet
     ])
-      .then(([expenses, income, trend]) => on && setData({ expenses, income, trend }))
-      .catch(() => on && setData({ expenses: [], income: [], trend: [] }));
+      .then(([expenses, income, trend, accounts]) => on && setData({ expenses, income, trend, accounts }))
+      .catch(() => on && setData({ expenses: [], income: [], trend: [], accounts: [] }));
     return () => { on = false; };
   }, [monthKey, refreshKey]);
 
   if (data === null) return <div className="center">Loading…</div>;
 
-  const { expenses, income, trend } = data;
+  const { expenses, income, trend, accounts } = data;
   const catOf = (id) => categories.find((c) => c.id === id) || { name: "Uncategorized", icon: "❓", color: "#999" };
   const totalExp = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const totalInc = income.reduce((s, e) => s + Number(e.amount), 0);
@@ -46,6 +47,29 @@ export default function Dashboard({ cur, categories, refreshKey }) {
           <strong>{net >= 0 ? "" : "−"}{fmt(Math.abs(net))}</strong>
         </div>
         <div className="meta">{MONTHS[cur.getMonth()]} {cur.getFullYear()} · {income.length} income · {expenses.length} expense{expenses.length !== 1 ? "s" : ""}</div>
+      </div>
+
+      {/* Where the money is — manual account balances */}
+      <div className="section-h">
+        Where your money is
+        {(accounts || []).length > 0 && (
+          <span className="pill">{fmt((accounts || []).reduce((s, a) => s + Number(a.balance || 0), 0))}</span>
+        )}
+      </div>
+      <div className="card" style={{ padding: "6px 16px" }}>
+        {(accounts || []).length === 0 ? (
+          <div className="hint" style={{ padding: "10px 0" }}>
+            No accounts yet. Add your bank, e-wallet or cash in <strong>Settings</strong> to track where your money sits.
+          </div>
+        ) : (
+          accounts.map((a) => (
+            <div className="mgr-row" key={a.id}>
+              <div className="ic" style={{ width: 32, height: 32, borderRadius: 9, fontSize: 16, background: "#f0f2f2", display: "flex", alignItems: "center", justifyContent: "center" }}>{a.icon}</div>
+              <div className="nm">{a.name}</div>
+              <strong className="acc-bal">{fmt(a.balance)}</strong>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Trends */}
