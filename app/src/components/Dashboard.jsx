@@ -42,7 +42,7 @@ export default function Dashboard({ cur, categories, refreshKey }) {
           </div>
         </div>
         <div className={"net " + (net >= 0 ? "pos" : "neg")}>
-          <span>{net >= 0 ? "Money left" : "Overspent"}</span>
+          <span>Balance</span>
           <strong>{net >= 0 ? "" : "−"}{fmt(Math.abs(net))}</strong>
         </div>
         <div className="meta">{MONTHS[cur.getMonth()]} {cur.getFullYear()} · {income.length} income · {expenses.length} expense{expenses.length !== 1 ? "s" : ""}</div>
