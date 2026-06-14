@@ -39,6 +39,18 @@ create table if not exists categories (
 );
 create index if not exists categories_household_idx on categories(household_id);
 
+-- Money locations with a manually-maintained balance (banks, e-wallets, cash…).
+create table if not exists accounts (
+  id            uuid primary key default gen_random_uuid(),
+  household_id  uuid not null references households(id) on delete cascade,
+  name          text not null default 'Account',
+  icon          text not null default '🏦',
+  balance       numeric(12,2) not null default 0,
+  sort_order    int  not null default 100,
+  created_at    timestamptz not null default now()
+);
+create index if not exists accounts_household_idx on accounts(household_id);
+
 -- Expenses. amount is stored in the household currency (PHP).
 create table if not exists expenses (
   id            uuid primary key default gen_random_uuid(),
@@ -46,6 +58,7 @@ create table if not exists expenses (
   amount        numeric(12,2) not null check (amount > 0),
   category_id   uuid references categories(id) on delete set null,
   paid_by       uuid references profiles(id) on delete set null, -- who paid
+  account_id    uuid references accounts(id) on delete set null, -- paid from which account
   note          text default '',
   spent_on      date not null default current_date,
   created_by    uuid references profiles(id) on delete set null,
@@ -61,6 +74,7 @@ create table if not exists income (
   amount        numeric(12,2) not null check (amount > 0),
   source        text not null default 'Income',   -- e.g. 'Salary', 'Bonus'
   received_by   uuid references profiles(id) on delete set null, -- who earned it
+  account_id    uuid references accounts(id) on delete set null, -- deposited into which account
   note          text default '',
   received_on   date not null default current_date,
   created_at    timestamptz not null default now()
@@ -83,6 +97,35 @@ create table if not exists recurring_income (
 );
 create index if not exists recincome_household_idx on recurring_income(household_id);
 
+-- Recurring expense rules (e.g. rent on day 1, subscriptions).
+create table if not exists recurring_expenses (
+  id            uuid primary key default gen_random_uuid(),
+  household_id  uuid not null references households(id) on delete cascade,
+  amount        numeric(12,2) not null check (amount > 0),
+  category_id   uuid references categories(id) on delete set null,
+  paid_by       uuid references profiles(id) on delete set null,
+  day_of_month  int  not null default 1 check (day_of_month between 1 and 31),
+  note          text default '',
+  active        boolean not null default true,
+  start_month   date not null default date_trunc('month', current_date)::date,
+  created_at    timestamptz not null default now()
+);
+create index if not exists recexp_household_idx on recurring_expenses(household_id);
+
+-- Transfers move money between two accounts (no income/expense effect).
+create table if not exists transfers (
+  id            uuid primary key default gen_random_uuid(),
+  household_id  uuid not null references households(id) on delete cascade,
+  amount        numeric(12,2) not null check (amount > 0),
+  from_account  uuid references accounts(id) on delete set null,
+  to_account    uuid references accounts(id) on delete set null,
+  note          text default '',
+  moved_on      date not null default current_date,
+  created_at    timestamptz not null default now()
+);
+create index if not exists transfers_household_idx on transfers(household_id);
+create index if not exists transfers_moved_on_idx on transfers(moved_on);
+
 -- Monthly budgets per category (Phase 3). month stored as first day of month.
 create table if not exists budgets (
   id            uuid primary key default gen_random_uuid(),
@@ -94,18 +137,6 @@ create table if not exists budgets (
   unique (household_id, category_id, month)
 );
 create index if not exists budgets_household_idx on budgets(household_id);
-
--- Money locations with a manually-maintained balance (banks, e-wallets, cash…).
-create table if not exists accounts (
-  id            uuid primary key default gen_random_uuid(),
-  household_id  uuid not null references households(id) on delete cascade,
-  name          text not null default 'Account',
-  icon          text not null default '🏦',
-  balance       numeric(12,2) not null default 0,
-  sort_order    int  not null default 100,
-  created_at    timestamptz not null default now()
-);
-create index if not exists accounts_household_idx on accounts(household_id);
 
 -- ---------- Helper: current user's household ----------
 create or replace function current_household_id()
@@ -124,7 +155,9 @@ alter table expenses   enable row level security;
 alter table budgets    enable row level security;
 alter table income            enable row level security;
 alter table recurring_income  enable row level security;
+alter table recurring_expenses enable row level security;
 alter table accounts          enable row level security;
+alter table transfers         enable row level security;
 
 -- households: members can see + update their own household
 drop policy if exists hh_select on households;
@@ -175,6 +208,21 @@ drop policy if exists acc_all on accounts;
 create policy acc_all on accounts for all
   using (household_id = current_household_id())
   with check (household_id = current_household_id());
+
+drop policy if exists recexp_all on recurring_expenses;
+create policy recexp_all on recurring_expenses for all
+  using (household_id = current_household_id())
+  with check (household_id = current_household_id());
+
+drop policy if exists trf_all on transfers;
+create policy trf_all on transfers for all
+  using (household_id = current_household_id())
+  with check (household_id = current_household_id());
+
+-- ---------- Migration for existing databases ----------
+-- (adds columns/tables that older installs won't have; safe to re-run)
+alter table expenses add column if not exists account_id uuid references accounts(id) on delete set null;
+alter table income   add column if not exists account_id uuid references accounts(id) on delete set null;
 
 -- ---------- New-user bootstrap ----------
 -- When a user signs up: create a household (or join one via invite metadata)

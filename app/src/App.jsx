@@ -158,7 +158,7 @@ export default function App() {
       <main>
         {tab === "dashboard" && <Dashboard cur={cur} categories={categories} refreshKey={refreshKey} />}
         {tab === "history" && (
-          <History cur={cur} categories={categories} members={members} refreshKey={refreshKey}
+          <History cur={cur} categories={categories} members={members} accounts={accounts} refreshKey={refreshKey}
                    onEdit={(kind, entry) => openSheet(kind, entry)} />
         )}
         {tab === "budgets" && <Budgets cur={cur} categories={categories} refreshKey={refreshKey} onChange={refresh} />}

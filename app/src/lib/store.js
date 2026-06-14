@@ -43,19 +43,30 @@ function readStore() {
     categories: DEFAULT_CATS.map((c, i) => ({ id: "c" + i, ...c })),
     expenses: [],
     budgets: [], // { id, category_id, month:'YYYY-MM', amount }
-    income: [], // { id, amount, source, received_by, note, received_on }
+    income: [], // { id, amount, source, received_by, account_id, note, received_on }
     recurring_income: [], // { id, amount, source, day_of_month, received_by, note, active, start_month:'YYYY-MM' }
+    recurring_expenses: [], // { id, amount, category_id, paid_by, day_of_month, note, active, start_month }
     // Money locations with a manually-maintained balance (banks, e-wallets, cash…).
     accounts: [
       { id: "a0", name: "Cash on hand", icon: "💵", balance: 0, sort_order: 10 },
       { id: "a1", name: "Bank", icon: "🏦", balance: 0, sort_order: 20 },
       { id: "a2", name: "E-wallet", icon: "📱", balance: 0, sort_order: 30 },
     ],
+    transfers: [], // { id, amount, from_account, to_account, note, moved_on }
   };
 }
 let L = readStore();
-if (!L.accounts) L.accounts = []; // migrate stores saved before accounts existed
+// Migrate stores saved before these collections existed.
+if (!L.accounts) L.accounts = [];
+if (!L.transfers) L.transfers = [];
+if (!L.recurring_expenses) L.recurring_expenses = [];
 function lsave() { localStorage.setItem(LKEY, JSON.stringify(L)); }
+// Apply a delta to an account's manual balance (no-op if no account given).
+function adjBal(id, delta) {
+  if (!id) return;
+  const a = L.accounts.find((x) => x.id === id);
+  if (a) a.balance = Number(a.balance || 0) + Number(delta || 0);
+}
 
 // ----- shared helpers (used by both modes) -----
 function clampDay(year, month0, day) {
@@ -77,6 +88,25 @@ export function expandRecurring(rules, monthKey) {
         received_by: r.received_by || null,
         note: r.note || "",
         received_on: `${monthKey}-${String(day).padStart(2, "0")}`,
+        recurring: true,
+      };
+    });
+}
+// Expand active recurring expense rules into virtual expense entries for a month.
+export function expandRecurringExp(rules, monthKey) {
+  const [y, m] = monthKey.split("-").map(Number);
+  return (rules || [])
+    .filter((r) => r.active !== false && (!r.start_month || r.start_month <= monthKey))
+    .map((r) => {
+      const day = clampDay(y, m - 1, r.day_of_month || 1);
+      return {
+        id: "rece:" + r.id + ":" + monthKey,
+        rule_id: r.id,
+        amount: Number(r.amount),
+        category_id: r.category_id || null,
+        paid_by: r.paid_by || null,
+        note: r.note || "",
+        spent_on: `${monthKey}-${String(day).padStart(2, "0")}`,
         recurring: true,
       };
     });
@@ -144,19 +174,31 @@ const localApi = {
   async deleteAccount(id) { L.accounts = L.accounts.filter((x) => x.id !== id); lsave(); },
 
   async getExpenses(monthKey) {
-    return L.expenses
+    const real = L.expenses
       .filter((e) => e.spent_on.slice(0, 7) === monthKey)
-      .sort((a, b) => b.spent_on.localeCompare(a.spent_on) || b.created - a.created);
+      .map((e) => ({ ...e, recurring: false }));
+    const virtual = expandRecurringExp(L.recurring_expenses, monthKey);
+    return [...real, ...virtual]
+      .sort((a, b) => b.spent_on.localeCompare(a.spent_on) || (b.created || 0) - (a.created || 0));
   },
-  async addExpense({ amount, category_id, paid_by, note, spent_on }) {
-    const e = { id: uid(), amount: +amount, category_id, paid_by, note: note || "", spent_on, created: Date.now() };
-    L.expenses.push(e); lsave(); return e;
+  async addExpense({ amount, category_id, paid_by, account_id, note, spent_on }) {
+    const e = { id: uid(), amount: +amount, category_id, paid_by, account_id: account_id || null, note: note || "", spent_on, created: Date.now() };
+    L.expenses.push(e); adjBal(e.account_id, -e.amount); lsave(); return e;
   },
   async updateExpense(id, patch) {
     const e = L.expenses.find((x) => x.id === id);
-    if (e) Object.assign(e, patch, { amount: +patch.amount }); lsave(); return e;
+    if (e) {
+      adjBal(e.account_id, +e.amount); // reverse old effect
+      Object.assign(e, patch, { amount: +patch.amount, account_id: patch.account_id ?? e.account_id });
+      adjBal(e.account_id, -e.amount); // apply new effect
+    }
+    lsave(); return e;
   },
-  async deleteExpense(id) { L.expenses = L.expenses.filter((x) => x.id !== id); lsave(); },
+  async deleteExpense(id) {
+    const e = L.expenses.find((x) => x.id === id);
+    if (e) adjBal(e.account_id, +e.amount);
+    L.expenses = L.expenses.filter((x) => x.id !== id); lsave();
+  },
 
   async getBudgets(monthKey) { return L.budgets.filter((b) => b.month === monthKey); },
   async setBudget(category_id, monthKey, amount) {
@@ -178,15 +220,24 @@ const localApi = {
     const virtual = expandRecurring(L.recurring_income, monthKey);
     return [...real, ...virtual].sort((a, b) => b.received_on.localeCompare(a.received_on));
   },
-  async addIncome({ amount, source, received_by, note, received_on }) {
-    const e = { id: uid(), amount: +amount, source: source || "Income", received_by, note: note || "", received_on, created: Date.now() };
-    L.income.push(e); lsave(); return e;
+  async addIncome({ amount, source, received_by, account_id, note, received_on }) {
+    const e = { id: uid(), amount: +amount, source: source || "Income", received_by, account_id: account_id || null, note: note || "", received_on, created: Date.now() };
+    L.income.push(e); adjBal(e.account_id, +e.amount); lsave(); return e;
   },
   async updateIncome(id, patch) {
     const e = L.income.find((x) => x.id === id);
-    if (e) Object.assign(e, patch, { amount: +patch.amount }); lsave(); return e;
+    if (e) {
+      adjBal(e.account_id, -e.amount); // reverse old effect
+      Object.assign(e, patch, { amount: +patch.amount, account_id: patch.account_id ?? e.account_id });
+      adjBal(e.account_id, +e.amount); // apply new effect
+    }
+    lsave(); return e;
   },
-  async deleteIncome(id) { L.income = L.income.filter((x) => x.id !== id); lsave(); },
+  async deleteIncome(id) {
+    const e = L.income.find((x) => x.id === id);
+    if (e) adjBal(e.account_id, -e.amount);
+    L.income = L.income.filter((x) => x.id !== id); lsave();
+  },
 
   async getRecurringIncome() { return [...L.recurring_income]; },
   async addRecurringIncome({ amount, source, day_of_month, received_by, note, start_month }) {
@@ -197,13 +248,42 @@ const localApi = {
   },
   async deleteRecurringIncome(id) { L.recurring_income = L.recurring_income.filter((r) => r.id !== id); lsave(); },
 
+  // ----- recurring expenses (rent, subscriptions…) -----
+  async getRecurringExpenses() { return [...L.recurring_expenses]; },
+  async addRecurringExpense({ amount, category_id, paid_by, day_of_month, note, start_month }) {
+    const r = { id: uid(), amount: +amount, category_id: category_id || null, paid_by: paid_by || null,
+      day_of_month: +day_of_month || 1, note: note || "", active: true,
+      start_month: start_month || new Date().toISOString().slice(0, 7) };
+    L.recurring_expenses.push(r); lsave(); return r;
+  },
+  async deleteRecurringExpense(id) { L.recurring_expenses = L.recurring_expenses.filter((r) => r.id !== id); lsave(); },
+
+  // ----- transfers between accounts -----
+  async getTransfers(monthKey) {
+    return L.transfers
+      .filter((t) => t.moved_on.slice(0, 7) === monthKey)
+      .sort((a, b) => b.moved_on.localeCompare(a.moved_on) || (b.created || 0) - (a.created || 0));
+  },
+  async addTransfer({ amount, from_account, to_account, note, moved_on }) {
+    const t = { id: uid(), amount: +amount, from_account: from_account || null, to_account: to_account || null,
+      note: note || "", moved_on, created: Date.now() };
+    L.transfers.push(t); adjBal(t.from_account, -t.amount); adjBal(t.to_account, +t.amount); lsave(); return t;
+  },
+  async deleteTransfer(id) {
+    const t = L.transfers.find((x) => x.id === id);
+    if (t) { adjBal(t.from_account, +t.amount); adjBal(t.to_account, -t.amount); }
+    L.transfers = L.transfers.filter((x) => x.id !== id); lsave();
+  },
+
   // ----- trends: totals per month for the last n months ending at monthKey -----
   async getMonthlyTotals(monthKey, n) {
     const out = [];
     for (let i = n - 1; i >= 0; i--) {
       const mk = addMonthKey(monthKey, -i);
-      const exp = L.expenses.filter((e) => e.spent_on.slice(0, 7) === mk).reduce((s, e) => s + Number(e.amount), 0);
+      const realExp = L.expenses.filter((e) => e.spent_on.slice(0, 7) === mk).reduce((s, e) => s + Number(e.amount), 0);
+      const virtExp = expandRecurringExp(L.recurring_expenses, mk).reduce((s, e) => s + Number(e.amount), 0);
       const inc = (await this.getIncome(mk)).reduce((s, e) => s + Number(e.amount), 0);
+      const exp = realExp + virtExp;
       out.push({ month: mk, income: inc, expense: exp, net: inc - exp });
     }
     return out;
@@ -321,25 +401,37 @@ const cloudApi = {
       .gte("spent_on", monthStart(monthKey)).lt("spent_on", monthEnd(monthKey))
       .order("spent_on", { ascending: false }).order("created_at", { ascending: false });
     if (error) throw error;
-    return (data || []).map((e) => ({ ...e, created: new Date(e.created_at).getTime() }));
+    const real = (data || []).map((e) => ({ ...e, recurring: false, created: new Date(e.created_at).getTime() }));
+    const { data: erules } = await supabase.from("recurring_expenses").select("*");
+    const eRows = (erules || []).map((r) => ({ ...r, start_month: (r.start_month || "").slice(0, 7) }));
+    const virtual = expandRecurringExp(eRows, monthKey);
+    return [...real, ...virtual].sort((a, b) => b.spent_on.localeCompare(a.spent_on));
   },
-  async addExpense({ amount, category_id, paid_by, note, spent_on }) {
+  async addExpense({ amount, category_id, paid_by, account_id, note, spent_on }) {
     const hid = await householdId();
     const me = (await supabase.auth.getUser()).data.user?.id;
     const { data, error } = await supabase.from("expenses")
-      .insert({ household_id: hid, amount, category_id, paid_by, note, spent_on, created_by: me })
+      .insert({ household_id: hid, amount, category_id, paid_by, account_id: account_id || null, note, spent_on, created_by: me })
       .select().single();
-    if (error) throw error; return data;
+    if (error) throw error;
+    await adjBalCloud(account_id, -Number(amount));
+    return data;
   },
   async updateExpense(id, patch) {
+    const { data: old } = await supabase.from("expenses").select("amount,account_id").eq("id", id).single();
     const { data, error } = await supabase.from("expenses")
-      .update({ amount: patch.amount, category_id: patch.category_id, paid_by: patch.paid_by, note: patch.note, spent_on: patch.spent_on })
+      .update({ amount: patch.amount, category_id: patch.category_id, paid_by: patch.paid_by, account_id: patch.account_id ?? old?.account_id ?? null, note: patch.note, spent_on: patch.spent_on })
       .eq("id", id).select().single();
-    if (error) throw error; return data;
+    if (error) throw error;
+    if (old) await adjBalCloud(old.account_id, +Number(old.amount)); // reverse old
+    await adjBalCloud(data.account_id, -Number(data.amount));        // apply new
+    return data;
   },
   async deleteExpense(id) {
+    const { data: old } = await supabase.from("expenses").select("amount,account_id").eq("id", id).single();
     const { error } = await supabase.from("expenses").delete().eq("id", id);
     if (error) throw error;
+    if (old) await adjBalCloud(old.account_id, +Number(old.amount));
   },
 
   async getBudgets(monthKey) {
@@ -372,22 +464,30 @@ const cloudApi = {
     const virtual = expandRecurring(ruleRows, monthKey);
     return [...real, ...virtual].sort((a, b) => b.received_on.localeCompare(a.received_on));
   },
-  async addIncome({ amount, source, received_by, note, received_on }) {
+  async addIncome({ amount, source, received_by, account_id, note, received_on }) {
     const hid = await householdId();
     const { data, error } = await supabase.from("income")
-      .insert({ household_id: hid, amount, source: source || "Income", received_by, note, received_on })
+      .insert({ household_id: hid, amount, source: source || "Income", received_by, account_id: account_id || null, note, received_on })
       .select().single();
-    if (error) throw error; return data;
+    if (error) throw error;
+    await adjBalCloud(account_id, +Number(amount));
+    return data;
   },
   async updateIncome(id, patch) {
+    const { data: old } = await supabase.from("income").select("amount,account_id").eq("id", id).single();
     const { data, error } = await supabase.from("income")
-      .update({ amount: patch.amount, source: patch.source, received_by: patch.received_by, note: patch.note, received_on: patch.received_on })
+      .update({ amount: patch.amount, source: patch.source, received_by: patch.received_by, account_id: patch.account_id ?? old?.account_id ?? null, note: patch.note, received_on: patch.received_on })
       .eq("id", id).select().single();
-    if (error) throw error; return data;
+    if (error) throw error;
+    if (old) await adjBalCloud(old.account_id, -Number(old.amount)); // reverse old
+    await adjBalCloud(data.account_id, +Number(data.amount));        // apply new
+    return data;
   },
   async deleteIncome(id) {
+    const { data: old } = await supabase.from("income").select("amount,account_id").eq("id", id).single();
     const { error } = await supabase.from("income").delete().eq("id", id);
     if (error) throw error;
+    if (old) await adjBalCloud(old.account_id, -Number(old.amount));
   },
 
   async getRecurringIncome() {
@@ -408,6 +508,50 @@ const cloudApi = {
     if (error) throw error;
   },
 
+  // ----- recurring expenses -----
+  async getRecurringExpenses() {
+    const { data, error } = await supabase.from("recurring_expenses").select("*").order("day_of_month");
+    if (error) throw error;
+    return (data || []).map((r) => ({ ...r, start_month: (r.start_month || "").slice(0, 7) }));
+  },
+  async addRecurringExpense({ amount, category_id, paid_by, day_of_month, note, start_month }) {
+    const hid = await householdId();
+    const { data, error } = await supabase.from("recurring_expenses")
+      .insert({ household_id: hid, amount, category_id: category_id || null, paid_by: paid_by || null,
+        day_of_month: day_of_month || 1, note: note || "", start_month: (start_month || new Date().toISOString().slice(0, 7)) + "-01" })
+      .select().single();
+    if (error) throw error; return data;
+  },
+  async deleteRecurringExpense(id) {
+    const { error } = await supabase.from("recurring_expenses").delete().eq("id", id);
+    if (error) throw error;
+  },
+
+  // ----- transfers between accounts -----
+  async getTransfers(monthKey) {
+    const { data, error } = await supabase.from("transfers").select("*")
+      .gte("moved_on", monthStart(monthKey)).lt("moved_on", monthEnd(monthKey))
+      .order("moved_on", { ascending: false });
+    if (error) throw error;
+    return (data || []).map((t) => ({ ...t, created: new Date(t.created_at).getTime() }));
+  },
+  async addTransfer({ amount, from_account, to_account, note, moved_on }) {
+    const hid = await householdId();
+    const { data, error } = await supabase.from("transfers")
+      .insert({ household_id: hid, amount, from_account: from_account || null, to_account: to_account || null, note: note || "", moved_on })
+      .select().single();
+    if (error) throw error;
+    await adjBalCloud(from_account, -Number(amount));
+    await adjBalCloud(to_account, +Number(amount));
+    return data;
+  },
+  async deleteTransfer(id) {
+    const { data: old } = await supabase.from("transfers").select("amount,from_account,to_account").eq("id", id).single();
+    const { error } = await supabase.from("transfers").delete().eq("id", id);
+    if (error) throw error;
+    if (old) { await adjBalCloud(old.from_account, +Number(old.amount)); await adjBalCloud(old.to_account, -Number(old.amount)); }
+  },
+
   async getMonthlyTotals(monthKey, n) {
     const first = addMonthKey(monthKey, -(n - 1));
     const rangeStart = monthStart(first);
@@ -416,11 +560,14 @@ const cloudApi = {
       supabase.from("expenses").select("amount,spent_on").gte("spent_on", rangeStart).lt("spent_on", rangeEnd),
       supabase.from("income").select("amount,received_on").gte("received_on", rangeStart).lt("received_on", rangeEnd),
     ]);
-    const rules = (await this.getRecurringIncome());
+    const rules = await this.getRecurringIncome();
+    const expRules = await this.getRecurringExpenses();
     const out = [];
     for (let i = n - 1; i >= 0; i--) {
       const mk = addMonthKey(monthKey, -i);
-      const e = (exp || []).filter((x) => x.spent_on.slice(0, 7) === mk).reduce((s, x) => s + Number(x.amount), 0);
+      const realExp = (exp || []).filter((x) => x.spent_on.slice(0, 7) === mk).reduce((s, x) => s + Number(x.amount), 0);
+      const virtExp = expandRecurringExp(expRules, mk).reduce((s, x) => s + Number(x.amount), 0);
+      const e = realExp + virtExp;
       const realInc = (inc || []).filter((x) => x.received_on.slice(0, 7) === mk).reduce((s, x) => s + Number(x.amount), 0);
       const virtInc = expandRecurring(rules, mk).reduce((s, x) => s + Number(x.amount), 0);
       const ti = realInc + virtInc;
@@ -432,6 +579,13 @@ const cloudApi = {
   exportData() { return null; },
   async clearAll() { throw new Error("Cloud data is shared — delete items individually."); },
 };
+
+// Apply a delta to an account's balance (read-modify-write; no-op if no account).
+async function adjBalCloud(id, delta) {
+  if (!id || !delta) return;
+  const { data } = await supabase.from("accounts").select("balance").eq("id", id).single();
+  if (data) await supabase.from("accounts").update({ balance: Number(data.balance || 0) + Number(delta) }).eq("id", id);
+}
 
 let _hid = null;
 async function householdId() {

@@ -2,15 +2,17 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/store.js";
 import { CURRENCY, todayISO } from "../lib/format.js";
 
-// Handles both EXPENSE and INCOME entries (add + edit), plus recurring income.
+// Handles EXPENSE and INCOME entries (add + edit), recurring rules, and TRANSFERS.
 export default function ExpenseSheet({ open, kind: initialKind, entry, categories, members, accounts = [], onClose, onSaved }) {
   const editing = Boolean(entry);
-  const [kind, setKind] = useState("expense"); // "expense" | "income"
+  const [kind, setKind] = useState("expense"); // "expense" | "income" | "transfer"
   const [amount, setAmount] = useState("");
   const [catId, setCatId] = useState(null);
   const [source, setSource] = useState("Salary");
   const [who, setWho] = useState(null);
-  const [accId, setAccId] = useState(null); // which account income lands in
+  const [accId, setAccId] = useState(null);     // account the income/expense touches
+  const [fromAcc, setFromAcc] = useState(null); // transfer: source account
+  const [toAcc, setToAcc] = useState(null);     // transfer: destination account
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
   const [repeat, setRepeat] = useState(false);
@@ -27,7 +29,9 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
     setCatId(entry && k === "expense" ? entry.category_id : categories[0]?.id ?? null);
     setSource(entry && k === "income" ? entry.source || "Income" : "Salary");
     setWho(entry ? (k === "expense" ? entry.paid_by : entry.received_by) : members[0]?.id ?? null);
-    setAccId(accounts[0]?.id ?? null);
+    setAccId(entry?.account_id ?? accounts[0]?.id ?? null);
+    setFromAcc(accounts[0]?.id ?? null);
+    setToAcc(accounts[1]?.id ?? accounts[0]?.id ?? null);
     setDate(entry ? (k === "expense" ? entry.spent_on : entry.received_on) : todayISO());
     setNote(entry ? entry.note || "" : "");
   }, [open, entry, initialKind, categories, members, accounts, editing]);
@@ -35,12 +39,33 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
   async function save() {
     const amt = parseFloat(String(amount).replace(/[^0-9.]/g, ""));
     if (!amt || amt <= 0) { setErr(true); return; }
+
+    if (kind === "transfer") {
+      if (!fromAcc || !toAcc) { alert("Pick both a 'from' and a 'to' account."); return; }
+      if (fromAcc === toAcc) { alert("Choose two different accounts."); return; }
+      setBusy(true);
+      try {
+        await api.addTransfer({ amount: amt, from_account: fromAcc, to_account: toAcc, note: note.trim(), moved_on: date });
+        onSaved(date);
+      } catch (e) { alert(e.message || "Could not save."); }
+      finally { setBusy(false); }
+      return;
+    }
+
     setBusy(true);
     try {
       if (kind === "expense") {
-        const payload = { amount: amt, category_id: catId, paid_by: who, note: note.trim(), spent_on: date };
-        if (editing) await api.updateExpense(entry.id, payload);
-        else await api.addExpense(payload);
+        if (!editing && repeat) {
+          const day = parseInt(date.slice(8, 10), 10) || 1;
+          await api.addRecurringExpense({
+            amount: amt, category_id: catId, paid_by: who, day_of_month: day,
+            note: note.trim(), start_month: date.slice(0, 7),
+          });
+        } else {
+          const payload = { amount: amt, category_id: catId, paid_by: who, account_id: accId, note: note.trim(), spent_on: date };
+          if (editing) await api.updateExpense(entry.id, payload);
+          else await api.addExpense(payload);
+        }
       } else {
         // income
         if (!editing && repeat) {
@@ -50,14 +75,9 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
             received_by: who, note: note.trim(), start_month: date.slice(0, 7),
           });
         } else {
-          const payload = { amount: amt, source: source.trim() || "Income", received_by: who, note: note.trim(), received_on: date };
+          const payload = { amount: amt, source: source.trim() || "Income", received_by: who, account_id: accId, note: note.trim(), received_on: date };
           if (editing) await api.updateIncome(entry.id, payload);
-          else {
-            await api.addIncome(payload);
-            // New one-time income lands in the chosen account: add to its balance.
-            const acc = accounts.find((a) => a.id === accId);
-            if (acc) await api.updateAccount(acc.id, { balance: Number(acc.balance || 0) + amt });
-          }
+          else await api.addIncome(payload);
         }
       }
       onSaved(editing ? null : date);
@@ -78,6 +98,20 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
   }
 
   const isIncome = kind === "income";
+  const isTransfer = kind === "transfer";
+  const title = editing
+    ? (isIncome ? "Edit income" : "Edit expense")
+    : isTransfer ? "Move money" : isIncome ? "Add income" : "Add expense";
+
+  const AccountChips = ({ value, onPick }) => (
+    <div className="chips">
+      {accounts.map((a) => (
+        <button type="button" key={a.id}
+          className={"chip" + (a.id === value ? " sel" : "")}
+          onClick={() => onPick(a.id)}>{a.icon} {a.name}</button>
+      ))}
+    </div>
+  );
 
   return (
     <>
@@ -87,13 +121,14 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
         <div className="grab" />
 
         {!editing && (
-          <div className="seg">
-            <button className={!isIncome ? "on" : ""} onClick={() => setKind("expense")}>− Expense</button>
-            <button className={isIncome ? "on income" : ""} onClick={() => setKind("income")}>+ Income</button>
+          <div className="seg seg-3">
+            <button className={kind === "expense" ? "on" : ""} onClick={() => setKind("expense")}>− Expense</button>
+            <button className={kind === "income" ? "on income" : ""} onClick={() => setKind("income")}>+ Income</button>
+            <button className={isTransfer ? "on" : ""} onClick={() => setKind("transfer")}>⇄ Transfer</button>
           </div>
         )}
 
-        <h3>{editing ? (isIncome ? "Edit income" : "Edit expense") : isIncome ? "Add income" : "Add expense"}</h3>
+        <h3>{title}</h3>
 
         <input
           className="amount-in" inputMode="decimal" placeholder={CURRENCY + "0"}
@@ -103,7 +138,19 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
           autoFocus={!editing}
         />
 
-        {isIncome ? (
+        {isTransfer ? (
+          <>
+            <label className="fl">From account</label>
+            {accounts.length > 0 ? <AccountChips value={fromAcc} onPick={setFromAcc} />
+              : <div className="hint">Add accounts in Settings first.</div>}
+
+            <label className="fl">To account</label>
+            {accounts.length > 0 && <AccountChips value={toAcc} onPick={setToAcc} />}
+
+            <label className="fl">Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </>
+        ) : isIncome ? (
           <>
             <label className="fl">Source</label>
             <div className="chips">
@@ -125,17 +172,10 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
               ))}
             </div>
 
-            {!editing && !repeat && accounts.length > 0 && (
+            {!repeat && accounts.length > 0 && (
               <>
                 <label className="fl">Goes to which account</label>
-                <div className="chips">
-                  {accounts.map((a) => (
-                    <button type="button" key={a.id}
-                      className={"chip" + (a.id === accId ? " sel" : "")}
-                      onClick={() => setAccId(a.id)}>{a.icon} {a.name}</button>
-                  ))}
-                </div>
-                <div className="hint" style={{ margin: "6px 2px 0" }}>This amount is added to that account's balance.</div>
+                <AccountChips value={accId} onPick={setAccId} />
               </>
             )}
 
@@ -169,17 +209,35 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
               ))}
             </div>
 
+            {!repeat && accounts.length > 0 && (
+              <>
+                <label className="fl">Paid from which account</label>
+                <AccountChips value={accId} onPick={setAccId} />
+              </>
+            )}
+
             <label className="fl">Date</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+
+            {!editing && (
+              <label className="switch">
+                <input type="checkbox" checked={repeat} onChange={(e) => setRepeat(e.target.checked)} />
+                <span>Repeat every month (e.g. rent on day {parseInt(date.slice(8, 10), 10) || 1})</span>
+              </label>
+            )}
           </>
         )}
 
         <label className="fl">Note (optional)</label>
         <input value={note} onChange={(e) => setNote(e.target.value)}
-          placeholder={isIncome ? "e.g. May payroll" : "e.g. weekly market run"} />
+          placeholder={isTransfer ? "e.g. ATM withdrawal" : isIncome ? "e.g. May payroll" : "e.g. weekly market run"} />
 
         <button className="btn" onClick={save} disabled={busy}>
-          {busy ? "Saving…" : editing ? "Save changes" : isIncome ? (repeat ? "Add recurring income" : "Add income") : "Add expense"}
+          {busy ? "Saving…"
+            : editing ? "Save changes"
+            : isTransfer ? "Move money"
+            : isIncome ? (repeat ? "Add recurring income" : "Add income")
+            : (repeat ? "Add recurring expense" : "Add expense")}
         </button>
         {editing && <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>}
         <button className="btn ghost" onClick={onClose}>Cancel</button>
