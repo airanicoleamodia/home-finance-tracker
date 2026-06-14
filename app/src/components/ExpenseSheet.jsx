@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/store.js";
 import { CURRENCY, todayISO } from "../lib/format.js";
 
@@ -15,6 +15,60 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
   const [repeat, setRepeat] = useState(false);
   const [err, setErr] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Drag-to-close gesture
+  const sheetRef = useRef(null);
+  const drag = useRef({ startY: null, active: false });
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+
+  // Reset any in-progress drag whenever the sheet opens/closes.
+  useEffect(() => {
+    setDragY(0);
+    setDragging(false);
+    drag.current = { startY: null, active: false };
+  }, [open]);
+
+  function onPointerDown(e) {
+    // Don't hijack interactions with form fields.
+    if (e.target.closest("input, textarea, select")) { drag.current.startY = null; return; }
+    if (e.pointerType === "mouse" && e.button !== 0) { drag.current.startY = null; return; }
+    drag.current = { startY: e.clientY, active: false };
+  }
+
+  function onPointerMove(e) {
+    if (drag.current.startY == null) return;
+    const dy = e.clientY - drag.current.startY;
+    const atTop = (sheetRef.current?.scrollTop || 0) <= 0;
+    // Begin a close-drag only when pulling down from the top of the sheet.
+    if (!drag.current.active) {
+      if (dy > 6 && atTop) {
+        drag.current.active = true;
+        setDragging(true);
+        sheetRef.current?.setPointerCapture?.(e.pointerId);
+      } else {
+        return;
+      }
+    }
+    if (dy <= 0) { setDragY(0); return; }
+    // Light resistance so the drag feels anchored.
+    setDragY(dy);
+  }
+
+  function endDrag() {
+    if (!drag.current.active) { drag.current.startY = null; return; }
+    drag.current.active = false;
+    drag.current.startY = null;
+    setDragging(false);
+    const sheetH = sheetRef.current?.offsetHeight || 600;
+    // Close when dragged past ~25% of the sheet height (or 120px, whichever is less).
+    if (dragY > Math.min(sheetH * 0.25, 120)) {
+      setDragY(0);
+      onClose();
+    } else {
+      setDragY(0);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -75,7 +129,15 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
   return (
     <>
       <div className={"scrim" + (open ? " open" : "")} onClick={onClose} />
-      <div className={"sheet" + (open ? " open" : "")}>
+      <div
+        ref={sheetRef}
+        className={"sheet" + (open ? " open" : "")}
+        style={dragging ? { transform: `translateY(${dragY}px)`, transition: "none" } : undefined}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
         <div className="grab" />
 
         {!editing && (
