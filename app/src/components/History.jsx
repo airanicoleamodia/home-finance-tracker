@@ -92,15 +92,19 @@ export default function History({ cur, categories, members, accounts = [], refre
               );
             }
             const c = catOf(r.category_id);
-            const clickable = !r.recurring;
+            const isFee = Boolean(r.transfer_id);
+            const clickable = !r.recurring && !isFee;
             const sub = `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${nameOf(r.paid_by)}${r.account_id ? " · " + accName(r.account_id) : ""}${r.note ? " · " + r.note : ""}`;
             return (
               <button className="item" key={r.id} disabled={!clickable}
                 style={!clickable ? { cursor: "default" } : undefined}
                 onClick={() => clickable && onEdit("expense", r)}>
-                <div className="ic" style={{ background: hexA(c.color, 0.14) }}>{c.icon}</div>
+                <div className="ic" style={{ background: hexA(c.color, 0.14) }}>{isFee ? "⇄" : c.icon}</div>
                 <div className="it-mid">
-                  <div className="t1">{c.name}{r.recurring && <span className="pill" style={{ marginLeft: 6 }}>monthly</span>}</div>
+                  <div className="t1">{c.name}
+                    {r.recurring && <span className="pill" style={{ marginLeft: 6 }}>monthly</span>}
+                    {isFee && <span className="pill" style={{ marginLeft: 6 }}>transfer fee</span>}
+                  </div>
                   <div className="t2">{sub}</div>
                 </div>
                 <div className="it-amt">−{fmt(r.amount)}</div>

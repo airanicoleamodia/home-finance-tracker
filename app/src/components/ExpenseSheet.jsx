@@ -13,6 +13,7 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
   const [accId, setAccId] = useState(null);     // account the income/expense touches
   const [fromAcc, setFromAcc] = useState(null); // transfer: source account
   const [toAcc, setToAcc] = useState(null);     // transfer: destination account
+  const [fee, setFee] = useState("");           // transfer: optional fee (becomes an expense)
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
   const [repeat, setRepeat] = useState(false);
@@ -32,6 +33,7 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
     setAccId(entry?.account_id ?? accounts[0]?.id ?? null);
     setFromAcc(accounts[0]?.id ?? null);
     setToAcc(accounts[1]?.id ?? accounts[0]?.id ?? null);
+    setFee("");
     setDate(entry ? (k === "expense" ? entry.spent_on : entry.received_on) : todayISO());
     setNote(entry ? entry.note || "" : "");
   }, [open, entry, initialKind, categories, members, accounts, editing]);
@@ -43,9 +45,17 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
     if (kind === "transfer") {
       if (!fromAcc || !toAcc) { alert("Pick both a 'from' and a 'to' account."); return; }
       if (fromAcc === toAcc) { alert("Choose two different accounts."); return; }
+      const feeAmt = parseFloat(String(fee).replace(/[^0-9.]/g, "")) || 0;
+      // Fee is logged under a "Transfer Fee" category if one exists, else "Other".
+      const feeCat = categories.find((c) => (c.name || "").toLowerCase() === "transfer fee")
+        || categories.find((c) => (c.name || "").toLowerCase() === "other")
+        || categories[0];
       setBusy(true);
       try {
-        await api.addTransfer({ amount: amt, from_account: fromAcc, to_account: toAcc, note: note.trim(), moved_on: date });
+        await api.addTransfer({
+          amount: amt, from_account: fromAcc, to_account: toAcc, note: note.trim(), moved_on: date,
+          fee: feeAmt, fee_category_id: feeAmt > 0 ? (feeCat?.id ?? null) : null,
+        });
         onSaved(date);
       } catch (e) { alert(e.message || "Could not save."); }
       finally { setBusy(false); }
@@ -157,6 +167,11 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
 
             <label className="fl">To account</label>
             {accounts.length > 0 && <AccountChips value={toAcc} onPick={setToAcc} />}
+
+            <label className="fl">Transfer fee (optional)</label>
+            <input inputMode="decimal" placeholder={CURRENCY + "0"} value={fee}
+              onChange={(e) => setFee(e.target.value)} />
+            <div className="hint" style={{ margin: "6px 2px 0" }}>Charged to the source account and recorded as an expense.</div>
 
             <label className="fl">Date</label>
             <DateField />

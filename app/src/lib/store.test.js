@@ -164,4 +164,27 @@ describe("transfers (local mode)", () => {
     expect(await balanceOf("a1")).toBe(0);
     expect(await balanceOf("a0")).toBe(0);
   });
+
+  it("a transfer fee is charged to the source account as a linked expense", async () => {
+    const cat = (await api.getCategories())[0];
+    await api.addTransfer({ amount: 600, fee: 25, from_account: "a1", to_account: "a0", moved_on: "2026-06-10", fee_category_id: cat.id });
+    // source loses amount + fee, destination gains amount
+    expect(await balanceOf("a1")).toBe(-625);
+    expect(await balanceOf("a0")).toBe(600);
+    // the fee shows up as a real expense linked to the transfer
+    const fees = (await api.getExpenses("2026-06")).filter((e) => e.transfer_id);
+    expect(fees).toHaveLength(1);
+    expect(fees[0].amount).toBe(25);
+    expect(fees[0].account_id).toBe("a1");
+  });
+
+  it("deleting a transfer with a fee reverses the fee and removes the linked expense", async () => {
+    const cat = (await api.getCategories())[0];
+    const t = await api.addTransfer({ amount: 600, fee: 25, from_account: "a1", to_account: "a0", moved_on: "2026-06-10", fee_category_id: cat.id });
+    await api.deleteTransfer(t.id);
+    expect(await balanceOf("a1")).toBe(0);
+    expect(await balanceOf("a0")).toBe(0);
+    const fees = (await api.getExpenses("2026-06")).filter((e) => e.transfer_id);
+    expect(fees).toHaveLength(0);
+  });
 });

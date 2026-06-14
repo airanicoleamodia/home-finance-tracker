@@ -264,14 +264,32 @@ const localApi = {
       .filter((t) => t.moved_on.slice(0, 7) === monthKey)
       .sort((a, b) => b.moved_on.localeCompare(a.moved_on) || (b.created || 0) - (a.created || 0));
   },
-  async addTransfer({ amount, from_account, to_account, note, moved_on }) {
-    const t = { id: uid(), amount: +amount, from_account: from_account || null, to_account: to_account || null,
+  async addTransfer({ amount, from_account, to_account, note, moved_on, fee, fee_category_id }) {
+    const f = +fee || 0;
+    const t = { id: uid(), amount: +amount, fee: f, from_account: from_account || null, to_account: to_account || null,
       note: note || "", moved_on, created: Date.now() };
-    L.transfers.push(t); adjBal(t.from_account, -t.amount); adjBal(t.to_account, +t.amount); lsave(); return t;
+    L.transfers.push(t);
+    adjBal(t.from_account, -t.amount);
+    adjBal(t.to_account, +t.amount);
+    if (f > 0) {
+      // The fee is a real expense, paid from the source account, linked to this transfer.
+      const e = { id: uid(), amount: f, category_id: fee_category_id || null, paid_by: null,
+        account_id: t.from_account, note: "Transfer fee" + (note ? " · " + note : ""),
+        spent_on: moved_on, transfer_id: t.id, created: Date.now() };
+      L.expenses.push(e);
+      adjBal(t.from_account, -f);
+    }
+    lsave(); return t;
   },
   async deleteTransfer(id) {
     const t = L.transfers.find((x) => x.id === id);
-    if (t) { adjBal(t.from_account, +t.amount); adjBal(t.to_account, -t.amount); }
+    if (t) {
+      // reverse + remove any linked fee expense(s) first
+      L.expenses.filter((e) => e.transfer_id === id).forEach((e) => adjBal(e.account_id, +Number(e.amount)));
+      L.expenses = L.expenses.filter((e) => e.transfer_id !== id);
+      adjBal(t.from_account, +t.amount);
+      adjBal(t.to_account, -t.amount);
+    }
     L.transfers = L.transfers.filter((x) => x.id !== id); lsave();
   },
 
@@ -542,17 +560,30 @@ const cloudApi = {
     if (error) throw error;
     return (data || []).map((t) => ({ ...t, created: new Date(t.created_at).getTime() }));
   },
-  async addTransfer({ amount, from_account, to_account, note, moved_on }) {
+  async addTransfer({ amount, from_account, to_account, note, moved_on, fee, fee_category_id }) {
     const hid = await householdId();
+    const f = +fee || 0;
     const { data, error } = await supabase.from("transfers")
-      .insert({ household_id: hid, amount, from_account: from_account || null, to_account: to_account || null, note: note || "", moved_on })
+      .insert({ household_id: hid, amount, fee: f, from_account: from_account || null, to_account: to_account || null, note: note || "", moved_on })
       .select().single();
     if (error) throw error;
     await adjBalCloud(from_account, -Number(amount));
     await adjBalCloud(to_account, +Number(amount));
+    if (f > 0) {
+      const me = (await supabase.auth.getUser()).data.user?.id;
+      await supabase.from("expenses").insert({
+        household_id: hid, amount: f, category_id: fee_category_id || null, account_id: from_account || null,
+        note: "Transfer fee" + (note ? " · " + note : ""), spent_on: moved_on, transfer_id: data.id, created_by: me,
+      });
+      await adjBalCloud(from_account, -f);
+    }
     return data;
   },
   async deleteTransfer(id) {
+    // reverse + remove any linked fee expense first
+    const { data: fees } = await supabase.from("expenses").select("amount,account_id").eq("transfer_id", id);
+    for (const e of (fees || [])) await adjBalCloud(e.account_id, +Number(e.amount));
+    await supabase.from("expenses").delete().eq("transfer_id", id);
     const { data: old } = await supabase.from("transfers").select("amount,from_account,to_account").eq("id", id).single();
     const { error } = await supabase.from("transfers").delete().eq("id", id);
     if (error) throw error;

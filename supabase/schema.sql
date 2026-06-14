@@ -59,6 +59,7 @@ create table if not exists expenses (
   category_id   uuid references categories(id) on delete set null,
   paid_by       uuid references profiles(id) on delete set null, -- who paid
   account_id    uuid references accounts(id) on delete set null, -- paid from which account
+  transfer_id   uuid,                                            -- set when this expense is a transfer fee
   note          text default '',
   spent_on      date not null default current_date,
   created_by    uuid references profiles(id) on delete set null,
@@ -117,6 +118,7 @@ create table if not exists transfers (
   id            uuid primary key default gen_random_uuid(),
   household_id  uuid not null references households(id) on delete cascade,
   amount        numeric(12,2) not null check (amount > 0),
+  fee           numeric(12,2) not null default 0 check (fee >= 0), -- optional transfer fee (recorded as an expense)
   from_account  uuid references accounts(id) on delete set null,
   to_account    uuid references accounts(id) on delete set null,
   note          text default '',
@@ -223,6 +225,8 @@ create policy trf_all on transfers for all
 -- (adds columns/tables that older installs won't have; safe to re-run)
 alter table expenses add column if not exists account_id uuid references accounts(id) on delete set null;
 alter table income   add column if not exists account_id uuid references accounts(id) on delete set null;
+alter table expenses  add column if not exists transfer_id uuid;
+alter table transfers add column if not exists fee numeric(12,2) not null default 0;
 
 -- ---------- New-user bootstrap ----------
 -- When a user signs up: create a household (or join one via invite metadata)
