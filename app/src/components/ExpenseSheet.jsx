@@ -103,6 +103,17 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
     ? (isIncome ? "Edit income" : "Edit expense")
     : isTransfer ? "Move money" : isIncome ? "Add income" : "Add expense";
 
+  const isoMinus = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  const DateField = () => (
+    <>
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      <div className="chips" style={{ marginTop: 6 }}>
+        <button type="button" className={"chip" + (date === todayISO() ? " sel" : "")} onClick={() => setDate(todayISO())}>Today</button>
+        <button type="button" className={"chip" + (date === isoMinus(1) ? " sel" : "")} onClick={() => setDate(isoMinus(1))}>Yesterday</button>
+      </div>
+    </>
+  );
+
   const AccountChips = ({ value, onPick }) => (
     <div className="chips">
       {accounts.map((a) => (
@@ -148,7 +159,7 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
             {accounts.length > 0 && <AccountChips value={toAcc} onPick={setToAcc} />}
 
             <label className="fl">Date</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateField />
           </>
         ) : isIncome ? (
           <>
@@ -180,7 +191,7 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
             )}
 
             <label className="fl">Date received</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateField />
 
             {!editing && (
               <label className="switch">
@@ -217,7 +228,7 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
             )}
 
             <label className="fl">Date</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateField />
 
             {!editing && (
               <label className="switch">
