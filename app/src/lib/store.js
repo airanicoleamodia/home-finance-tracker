@@ -35,10 +35,10 @@ function readStore() {
   } catch (e) {}
   return {
     household: { id: "local", name: "My Household", currency: "PHP" },
-    profile: { id: "me", display_name: "Me" },
+    profile: { id: "me", display_name: "Me", role: "admin" },
     members: [
-      { id: "me", display_name: "Me" },
-      { id: "partner", display_name: "Partner" },
+      { id: "me", display_name: "Me", role: "admin" },
+      { id: "partner", display_name: "Partner", role: "member" },
     ],
     categories: DEFAULT_CATS.map((c, i) => ({ id: "c" + i, ...c })),
     expenses: [],
@@ -64,6 +64,7 @@ if (!L.transfers) L.transfers = [];
 if (!L.recurring_expenses) L.recurring_expenses = [];
 if (!L.loans) L.loans = [];
 if (!L.loan_repayments) L.loan_repayments = [];
+if (L.profile && !L.profile.role) L.profile.role = "admin"; // local user owns their data
 function lsave() { localStorage.setItem(LKEY, JSON.stringify(L)); }
 // Apply a delta to an account's manual balance (no-op if no account given).
 function adjBal(id, delta) {
@@ -396,7 +397,7 @@ const cloudApi = {
     if (!data.session) return null;
     const uidv = data.session.user.id;
     const { data: prof } = await supabase
-      .from("profiles").select("id,display_name,household_id").eq("id", uidv).single();
+      .from("profiles").select("id,display_name,household_id,role").eq("id", uidv).single();
     if (!prof) return { user: { id: uidv }, household: null, needsProfile: true };
     const { data: hh } = await supabase
       .from("households").select("id,name,currency").eq("id", prof.household_id).single();
@@ -448,7 +449,7 @@ const cloudApi = {
   },
 
   async getMembers() {
-    const { data, error } = await supabase.from("profiles").select("id,display_name");
+    const { data, error } = await supabase.from("profiles").select("id,display_name,role");
     if (error) throw error; return data || [];
   },
   async addMember() {

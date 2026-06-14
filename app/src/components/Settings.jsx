@@ -9,6 +9,9 @@ export default function Settings({ session, categories, members, onChange }) {
   const [newCat, setNewCat] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // The household creator is the admin; local mode is always admin (single owner).
+  const isAdmin = MODE === "local" || session?.user?.role === "admin";
+
   // accounts (money locations, manual balances)
   const [accounts, setAccounts] = useState([]);
   const [aName, setAName] = useState("");
@@ -165,7 +168,10 @@ export default function Settings({ session, categories, members, onChange }) {
     } catch (e) { alert(e.message); }
     finally { setBusy(false); }
   }
-  async function signOut() { await api.signOut(); location.reload(); }
+  async function logOut() {
+    if (!confirm("Log out of your household account?")) return;
+    await api.signOut(); location.reload();
+  }
 
   async function copyInvite() {
     const id = session?.household?.id;
@@ -249,9 +255,11 @@ export default function Settings({ session, categories, members, onChange }) {
         {members.map((m) => (
           <div className="mgr-row" key={m.id}>
             <div className="nm">👤 {m.display_name}</div>
-            {MODE === "local" && members.length > 1
-              ? <button className="x" onClick={() => removePerson(m.id)}>✕</button>
-              : <span className="pill">member</span>}
+            {m.role === "admin"
+              ? <span className="pill" style={{ background: "var(--brand-soft)", color: "#0b554f" }}>admin</span>
+              : MODE === "local" && members.length > 1
+                ? <button className="x" onClick={() => removePerson(m.id)}>✕</button>
+                : <span className="pill">member</span>}
           </div>
         ))}
         {MODE === "local" ? (
@@ -263,11 +271,13 @@ export default function Settings({ session, categories, members, onChange }) {
             </div>
             <div className="hint">Built to scale — add as many household members as you like.</div>
           </>
-        ) : (
+        ) : isAdmin ? (
           <>
             <button className="btn ghost" style={{ marginTop: 8 }} onClick={copyInvite}>🔗 Copy invite link</button>
             <div className="hint">Send this link to family. When they sign up through it, they join this household automatically.</div>
           </>
+        ) : (
+          <div className="hint">Only the household admin can invite new members.</div>
         )}
       </div>
 
@@ -291,8 +301,8 @@ export default function Settings({ session, categories, members, onChange }) {
 
       <div className="section-h">Preferences</div>
       <div className="card" style={{ padding: 16 }}>
-        <label className="fl" style={{ marginTop: 0 }}>Currency</label>
-        <select value={curCode} onChange={(e) => changeCurrency(e.target.value)}>
+        <label className="fl" style={{ marginTop: 0 }}>Currency {!isAdmin && <span className="hint" style={{ margin: 0 }}>(admin only)</span>}</label>
+        <select value={curCode} onChange={(e) => changeCurrency(e.target.value)} disabled={!isAdmin}>
           {CURRENCIES.map((code) => (
             <option key={code} value={code}>{CURRENCY_SYMBOLS[code]} {code}</option>
           ))}
@@ -311,27 +321,33 @@ export default function Settings({ session, categories, members, onChange }) {
         </div>
         <button className="btn ghost" onClick={exportCSV}>⬇️ Export CSV</button>
         <button className="btn ghost" onClick={exportBackup}>⬇️ Export backup (.json)</button>
-        {MODE === "cloud" && <button className="btn ghost" onClick={signOut}>Sign out</button>}
+        {MODE === "cloud" && <button className="btn danger" onClick={logOut}>🚪 Log out</button>}
       </div>
 
       <div className="section-h" style={{ color: "var(--danger)" }}>⚠️ Danger zone</div>
       <div className="card" style={{ padding: 16, borderColor: "var(--danger)" }}>
-        <div style={{ fontWeight: 700, fontSize: 14.5 }}>Reset data (start fresh)</div>
-        <div className="hint" style={{ margin: "4px 0 10px" }}>
-          Deletes every transaction and zeroes account balances, but keeps your accounts, categories and people. Good for a clean new month or year.
-        </div>
-        <button className="btn danger" onClick={resetData} disabled={busy}>Reset data</button>
+        {!isAdmin ? (
+          <div className="hint" style={{ margin: 0 }}>Only the household admin can reset or erase shared data.</div>
+        ) : (
+          <>
+            <div style={{ fontWeight: 700, fontSize: 14.5 }}>Reset data (start fresh)</div>
+            <div className="hint" style={{ margin: "4px 0 10px" }}>
+              Deletes every transaction and zeroes account balances, but keeps your accounts, categories and people. Good for a clean new month or year.
+            </div>
+            <button className="btn danger" onClick={resetData} disabled={busy}>Reset data</button>
 
-        <div style={{ fontWeight: 700, fontSize: 14.5, marginTop: 18 }}>Erase everything</div>
-        <div className="hint" style={{ margin: "4px 0 10px" }}>
-          Removes ALL data including your custom accounts and categories, then restores the default setup. The household{MODE === "cloud" ? " and everyone's logins stay" : " stays"} intact.
-        </div>
-        <button className="btn danger" onClick={factoryReset} disabled={busy}>Erase everything</button>
+            <div style={{ fontWeight: 700, fontSize: 14.5, marginTop: 18 }}>Erase everything</div>
+            <div className="hint" style={{ margin: "4px 0 10px" }}>
+              Removes ALL data including your custom accounts and categories, then restores the default setup. The household{MODE === "cloud" ? " and everyone's logins stay" : " stays"} intact.
+            </div>
+            <button className="btn danger" onClick={factoryReset} disabled={busy}>Erase everything</button>
 
-        {MODE === "cloud" && (
-          <div className="hint" style={{ marginTop: 16 }}>
-            Note: permanently deleting the whole household and member logins must be done from your Supabase dashboard — it can't be undone and isn't available in-app for safety.
-          </div>
+            {MODE === "cloud" && (
+              <div className="hint" style={{ marginTop: 16 }}>
+                Note: permanently deleting the whole household and member logins must be done from your Supabase dashboard — it can't be undone and isn't available in-app for safety.
+              </div>
+            )}
+          </>
         )}
       </div>
 

@@ -22,6 +22,7 @@ create table if not exists profiles (
   id            uuid primary key references auth.users(id) on delete cascade,
   household_id  uuid not null references households(id) on delete cascade,
   display_name  text not null default 'Member',
+  role          text not null default 'member',  -- 'admin' (household creator) or 'member'
   created_at    timestamptz not null default now()
 );
 create index if not exists profiles_household_idx on profiles(household_id);
@@ -268,6 +269,11 @@ alter table expenses add column if not exists account_id uuid references account
 alter table income   add column if not exists account_id uuid references accounts(id) on delete set null;
 alter table expenses  add column if not exists transfer_id uuid;
 alter table transfers add column if not exists fee numeric(12,2) not null default 0;
+alter table profiles  add column if not exists role text not null default 'member';
+-- Backfill: the earliest profile in each household (its creator) becomes admin.
+update profiles p set role = 'admin'
+where p.created_at = (select min(p2.created_at) from profiles p2 where p2.household_id = p.household_id)
+  and p.role <> 'admin';
 
 -- ---------- New-user bootstrap ----------
 -- When a user signs up: create a household (or join one via invite metadata)
@@ -291,9 +297,11 @@ begin
     returning id into hh;
   end if;
 
-  insert into profiles (id, household_id, display_name)
+  -- The household creator becomes admin; people who join via invite are members.
+  insert into profiles (id, household_id, display_name, role)
   values (new.id, hh,
-          coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email,'@',1)));
+          coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email,'@',1)),
+          case when invite is null then 'admin' else 'member' end);
 
   -- Seed standard categories only for a brand-new household.
   if invite is null then
