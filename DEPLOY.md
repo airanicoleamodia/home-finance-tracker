@@ -70,15 +70,21 @@ Then you can say things like *"Add my ₱30,000 salary on the 15th every month"*
 
 ## Adding more household members (shared mode)
 
-Each person installs the app from your Vercel URL and signs up. To have them join **your** household rather than create a new one, the simplest path for now: have them sign up, then in Supabase → **Table editor → profiles**, set their `household_id` to match yours. (A proper invite link can be added later.)
+In the app, go to **Settings → People → Copy invite link** and send it to your family. When they open that link and sign up through it, they automatically join **your** household (no Supabase editing needed).
+
+> Behind the scenes the link is `https://your-app-url/?invite=<household_id>`, and the signup trigger reads it to place the new member in your household.
 
 ---
+
+## Updating the database schema
+
+`supabase/schema.sql` is safe to re-run. After pulling new app features that need new tables/columns (accounts, transfers, recurring expenses, per-transaction accounts), open **Supabase → SQL Editor**, paste the whole `supabase/schema.sql`, and **Run** it again. It uses `create table if not exists` and `add column if not exists`, so it won't disturb existing data.
 
 ## Updating the app after changes
 
 Because the app uses an offline service worker in production, after you push an update:
 - Vercel redeploys automatically when you push to GitHub.
-- On phones, the new version loads on next open (may take one extra refresh as the service worker updates).
+- On phones, the new version loads on next open. The service worker is now **network-first for the app shell** and auto-reloads once when a new version is detected, so updates land without manually clearing the cache (occasionally it takes one extra reopen).
 
 ---
 
