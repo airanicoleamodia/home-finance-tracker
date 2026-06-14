@@ -189,6 +189,56 @@ describe("transfers (local mode)", () => {
   });
 });
 
+describe("loans (local mode)", () => {
+  beforeEach(async () => { await api.clearAll(); });
+
+  it("lending out decreases the source account; borrowing increases it", async () => {
+    await api.addLoan({ is_lent: true, counterparty: "Tito Boy", principal: 5000, account_id: "a0", started_on: "2026-06-01" });
+    expect(await balanceOf("a0")).toBe(-5000);
+    await api.addLoan({ is_lent: false, counterparty: "Home Credit", principal: 10000, account_id: "a1", started_on: "2026-06-01" });
+    expect(await balanceOf("a1")).toBe(10000);
+  });
+
+  it("outstanding = principal − sum(repayments) across partial repayments", async () => {
+    const l = await api.addLoan({ is_lent: true, counterparty: "Ana", principal: 1000, account_id: "a0", started_on: "2026-06-01" });
+    await api.addRepayment({ loan_id: l.id, amount: 300, account_id: "a0", paid_on: "2026-06-10" });
+    await api.addRepayment({ loan_id: l.id, amount: 200, account_id: "a0", paid_on: "2026-06-20" });
+    const loan = (await api.getLoans()).find((x) => x.id === l.id);
+    expect(loan.repaid).toBe(500);
+    expect(loan.outstanding).toBe(500);
+  });
+
+  it("repaying a loan we gave brings cash in; a loan we owe sends cash out", async () => {
+    const lent = await api.addLoan({ is_lent: true, counterparty: "Ana", principal: 1000, account_id: "a0", started_on: "2026-06-01" });
+    expect(await balanceOf("a0")).toBe(-1000);
+    await api.addRepayment({ loan_id: lent.id, amount: 400, account_id: "a0", paid_on: "2026-06-10" });
+    expect(await balanceOf("a0")).toBe(-600);
+
+    const owed = await api.addLoan({ is_lent: false, counterparty: "Bank", principal: 2000, account_id: "a1", started_on: "2026-06-01" });
+    expect(await balanceOf("a1")).toBe(2000);
+    await api.addRepayment({ loan_id: owed.id, amount: 500, account_id: "a1", paid_on: "2026-06-10" });
+    expect(await balanceOf("a1")).toBe(1500);
+  });
+
+  it("deleting a repayment, then the loan, fully reverses cash", async () => {
+    const l = await api.addLoan({ is_lent: true, counterparty: "Ana", principal: 1000, account_id: "a0", started_on: "2026-06-01" });
+    const r = await api.addRepayment({ loan_id: l.id, amount: 400, account_id: "a0", paid_on: "2026-06-10" });
+    await api.deleteRepayment(r.id);
+    expect(await balanceOf("a0")).toBe(-1000); // back to just the loan-out effect
+    await api.deleteLoan(l.id);
+    expect(await balanceOf("a0")).toBe(0);
+    expect(await api.getLoans()).toHaveLength(0);
+  });
+
+  it("a loan with no account still tracks outstanding without moving cash", async () => {
+    const l = await api.addLoan({ is_lent: true, counterparty: "Cash deal", principal: 800, account_id: null, started_on: "2026-06-01" });
+    expect(await balanceOf("a0")).toBe(0);
+    expect(await balanceOf("a1")).toBe(0);
+    const loan = (await api.getLoans()).find((x) => x.id === l.id);
+    expect(loan.outstanding).toBe(800);
+  });
+});
+
 describe("danger zone (local mode)", () => {
   beforeEach(async () => { await api.clearAll(); });
 

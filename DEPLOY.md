@@ -78,7 +78,7 @@ In the app, go to **Settings → People → Copy invite link** and send it to yo
 
 ## Updating the database schema
 
-`supabase/schema.sql` is safe to re-run. After pulling new app features that need new tables/columns (accounts, transfers, recurring expenses, per-transaction accounts), open **Supabase → SQL Editor**, paste the whole `supabase/schema.sql`, and **Run** it again. It uses `create table if not exists` and `add column if not exists`, so it won't disturb existing data.
+`supabase/schema.sql` is safe to re-run. After pulling new app features that need new tables/columns (accounts, transfers, recurring expenses, per-transaction accounts, loans & repayments), open **Supabase → SQL Editor**, paste the whole `supabase/schema.sql`, and **Run** it again. It uses `create table if not exists` and `add column if not exists`, so it won't disturb existing data.
 
 ## Updating the app after changes
 

@@ -13,15 +13,16 @@ export default function Dashboard({ cur, categories, refreshKey }) {
       api.getIncome(monthKey),
       api.getMonthlyTotals(monthKey, 6),
       api.getAccounts().catch(() => []), // non-fatal: DB migration may not be applied yet
+      api.getLoans().catch(() => []),
     ])
-      .then(([expenses, income, trend, accounts]) => on && setData({ expenses, income, trend, accounts }))
-      .catch(() => on && setData({ expenses: [], income: [], trend: [], accounts: [] }));
+      .then(([expenses, income, trend, accounts, loans]) => on && setData({ expenses, income, trend, accounts, loans }))
+      .catch(() => on && setData({ expenses: [], income: [], trend: [], accounts: [], loans: [] }));
     return () => { on = false; };
   }, [monthKey, refreshKey]);
 
   if (data === null) return <div className="center">Loading…</div>;
 
-  const { expenses, income, trend, accounts } = data;
+  const { expenses, income, trend, accounts, loans } = data;
   const catOf = (id) => categories.find((c) => c.id === id) || { name: "Uncategorized", icon: "❓", color: "#999" };
   const totalExp = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const totalInc = income.reduce((s, e) => s + Number(e.amount), 0);
@@ -72,6 +73,8 @@ export default function Dashboard({ cur, categories, refreshKey }) {
         )}
       </div>
 
+      <NetWorth accounts={accounts} loans={loans} />
+
       {expenses.length === 0 ? (
         <div className="card empty" style={{ marginTop: 16 }}><div className="em">🪙</div>
           <div className="et">No expenses yet this month.<br />Tap + to add income or an expense.</div></div>
@@ -88,6 +91,32 @@ export default function Dashboard({ cur, categories, refreshKey }) {
       {/* Trends */}
       <div className="section-h">6-month trend</div>
       <Trend trend={trend} />
+    </>
+  );
+}
+
+function NetWorth({ accounts, loans }) {
+  const cash = (accounts || []).reduce((s, a) => s + Number(a.balance || 0), 0);
+  const receivable = (loans || []).filter((l) => l.is_lent).reduce((s, l) => s + Number(l.outstanding || 0), 0);
+  const payable = (loans || []).filter((l) => !l.is_lent).reduce((s, l) => s + Number(l.outstanding || 0), 0);
+  if (!receivable && !payable) return null; // nothing loan-related yet — keep the dashboard clean
+  const net = cash + receivable - payable;
+  const Row = ({ label, value, color, bold }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, padding: "4px 0", fontWeight: bold ? 800 : 400 }}>
+      <span style={{ color: "var(--muted)" }}>{label}</span>
+      <strong style={{ color: color || "var(--ink)" }}>{value}</strong>
+    </div>
+  );
+  return (
+    <>
+      <div className="section-h">Net worth</div>
+      <div className="card" style={{ padding: 14 }}>
+        <Row label="Cash in accounts" value={fmt(cash)} />
+        {receivable > 0 && <Row label="Owed to us" value={"+" + fmt(receivable)} color="var(--brand)" />}
+        {payable > 0 && <Row label="We owe" value={"−" + fmt(payable)} color="var(--danger)" />}
+        <div style={{ borderTop: "1px solid var(--line)", margin: "8px 0" }} />
+        <Row label="Net worth" value={fmt(net)} bold />
+      </div>
     </>
   );
 }

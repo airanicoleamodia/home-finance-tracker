@@ -73,9 +73,19 @@ main{padding:16px 18px}
 .empty .em{font-size:34px}
 .empty .et{margin-top:8px;font-size:14px}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;max-width:480px;margin:0 auto;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
-nav.tabs button{background:none;border:none;color:var(--muted);font-size:11px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:4px 12px;border-radius:10px}
-nav.tabs button .ti{font-size:20px;line-height:1}
+nav.tabs button{background:none;border:none;color:var(--muted);font-size:10.5px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:4px 6px;border-radius:10px}
+nav.tabs button .ti{font-size:19px;line-height:1}
 nav.tabs button.active{color:var(--brand)}
+:root[data-theme="dark"] nav.tabs{background:rgba(14,20,19,.92)}
+/* Loans tab */
+.loan-row{padding:11px 0;border-bottom:1px solid var(--line)}
+.loan-row:last-child{border-bottom:none}
+.loan-head{display:flex;align-items:flex-start;gap:8px}
+.loan-main{flex:1;min-width:0;background:none;border:none;text-align:left;padding:0;cursor:pointer;color:var(--ink)}
+.loan-main .t1{font-size:14.5px;font-weight:600}
+.loan-main .t2{font-size:12.5px;color:var(--muted);margin-top:2px}
+.loan-actions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
+.mini-btn{border:none;background:var(--brand);color:#fff;font-weight:700;font-size:12.5px;padding:6px 12px;border-radius:9px;cursor:pointer}
 .fab{position:fixed;bottom:74px;right:max(18px,calc(50% - 240px + 18px));z-index:31;width:58px;height:58px;border-radius:50%;background:var(--brand);color:#fff;border:none;font-size:30px;line-height:1;box-shadow:0 8px 20px rgba(15,118,110,.4);cursor:pointer}
 .scrim{position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.open{opacity:1;pointer-events:auto}

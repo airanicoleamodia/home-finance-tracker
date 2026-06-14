@@ -4,12 +4,13 @@ import { MONTHS, setCurrency } from "./lib/format.js";
 import Auth from "./components/Auth.jsx";
 import Dashboard from "./components/Dashboard.jsx";
 import History from "./components/History.jsx";
+import Loans from "./components/Loans.jsx";
 import Budgets from "./components/Budgets.jsx";
 import Settings from "./components/Settings.jsx";
 import ExpenseSheet from "./components/ExpenseSheet.jsx";
 import ResetPassword from "./components/ResetPassword.jsx";
 
-const TABS = ["dashboard", "history", "budgets", "settings"];
+const TABS = ["dashboard", "history", "loans", "budgets", "settings"];
 
 // Each tab is a hash route (#/dashboard, #/history, …) so the browser keeps a
 // history entry per page. That makes the phone's Back button move between tabs
@@ -162,6 +163,7 @@ export default function App() {
           <History cur={cur} categories={categories} members={members} accounts={accounts} refreshKey={refreshKey}
                    onEdit={(kind, entry) => openSheet(kind, entry)} />
         )}
+        {tab === "loans" && <Loans accounts={accounts} refreshKey={refreshKey} onChange={refresh} />}
         {tab === "budgets" && <Budgets cur={cur} categories={categories} refreshKey={refreshKey} onChange={refresh} />}
         {tab === "settings" && <Settings session={session} categories={categories} members={members} onChange={refresh} />}
       </main>
@@ -171,6 +173,7 @@ export default function App() {
       <nav className="tabs">
         <Tab id="dashboard" cur={tab} set={goTab} icon="📊" label="Dashboard" />
         <Tab id="history" cur={tab} set={goTab} icon="🧾" label="History" />
+        <Tab id="loans" cur={tab} set={goTab} icon="🤝" label="Loans" />
         <Tab id="budgets" cur={tab} set={goTab} icon="🎯" label="Budgets" />
         <Tab id="settings" cur={tab} set={goTab} icon="⚙️" label="Settings" />
       </nav>

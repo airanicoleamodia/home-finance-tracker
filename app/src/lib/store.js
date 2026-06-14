@@ -53,6 +53,8 @@ function readStore() {
       { id: "a2", name: "E-wallet", icon: "📱", balance: 0, sort_order: 30 },
     ],
     transfers: [], // { id, amount, from_account, to_account, note, moved_on }
+    loans: [], // { id, is_lent, counterparty, principal, account_id, note, started_on, due_on }
+    loan_repayments: [], // { id, loan_id, amount, account_id, note, paid_on }
   };
 }
 let L = readStore();
@@ -60,6 +62,8 @@ let L = readStore();
 if (!L.accounts) L.accounts = [];
 if (!L.transfers) L.transfers = [];
 if (!L.recurring_expenses) L.recurring_expenses = [];
+if (!L.loans) L.loans = [];
+if (!L.loan_repayments) L.loan_repayments = [];
 function lsave() { localStorage.setItem(LKEY, JSON.stringify(L)); }
 // Apply a delta to an account's manual balance (no-op if no account given).
 function adjBal(id, delta) {
@@ -293,6 +297,53 @@ const localApi = {
     L.transfers = L.transfers.filter((x) => x.id !== id); lsave();
   },
 
+  // ----- loans (receivables we lent + payables we owe) -----
+  async getLoans() {
+    return L.loans.map((l) => {
+      const repaid = L.loan_repayments.filter((r) => r.loan_id === l.id).reduce((s, r) => s + Number(r.amount), 0);
+      return { ...l, repaid, outstanding: Math.max(0, Number(l.principal) - repaid) };
+    }).sort((a, b) => (b.started_on || "").localeCompare(a.started_on || ""));
+  },
+  async getLoanRepayments(loanId) {
+    return L.loan_repayments
+      .filter((r) => r.loan_id === loanId)
+      .sort((a, b) => (b.paid_on || "").localeCompare(a.paid_on || "") || (b.created || 0) - (a.created || 0));
+  },
+  async addLoan({ is_lent, counterparty, principal, account_id, note, started_on, due_on }) {
+    const l = { id: uid(), is_lent: !!is_lent, counterparty: counterparty || "", principal: +principal,
+      account_id: account_id || null, note: note || "", started_on, due_on: due_on || null, created: Date.now() };
+    L.loans.push(l);
+    // Lending out moves cash OUT; borrowing brings cash IN.
+    adjBal(l.account_id, l.is_lent ? -l.principal : +l.principal);
+    lsave(); return l;
+  },
+  async deleteLoan(id) {
+    const l = L.loans.find((x) => x.id === id);
+    if (l) {
+      // reverse every repayment's cash effect, then the loan's own
+      L.loan_repayments.filter((r) => r.loan_id === id).forEach((r) => adjBal(r.account_id, l.is_lent ? -Number(r.amount) : +Number(r.amount)));
+      L.loan_repayments = L.loan_repayments.filter((r) => r.loan_id !== id);
+      adjBal(l.account_id, l.is_lent ? +l.principal : -l.principal);
+    }
+    L.loans = L.loans.filter((x) => x.id !== id); lsave();
+  },
+  async addRepayment({ loan_id, amount, account_id, note, paid_on }) {
+    const l = L.loans.find((x) => x.id === loan_id);
+    const r = { id: uid(), loan_id, amount: +amount, account_id: account_id || null, note: note || "", paid_on, created: Date.now() };
+    L.loan_repayments.push(r);
+    // Repaying a loan we GAVE brings cash IN; repaying a loan we HAVE sends cash OUT.
+    if (l) adjBal(r.account_id, l.is_lent ? +r.amount : -r.amount);
+    lsave(); return r;
+  },
+  async deleteRepayment(id) {
+    const r = L.loan_repayments.find((x) => x.id === id);
+    if (r) {
+      const l = L.loans.find((x) => x.id === r.loan_id);
+      if (l) adjBal(r.account_id, l.is_lent ? -Number(r.amount) : +Number(r.amount));
+    }
+    L.loan_repayments = L.loan_repayments.filter((x) => x.id !== id); lsave();
+  },
+
   // ----- trends: totals per month for the last n months ending at monthKey -----
   async getMonthlyTotals(monthKey, n) {
     const out = [];
@@ -313,13 +364,14 @@ const localApi = {
       accounts: L.accounts, categories: L.categories, members: L.members,
       expenses: L.expenses, income: L.income, transfers: L.transfers,
       recurring_income: L.recurring_income, recurring_expenses: L.recurring_expenses,
-      budgets: L.budgets,
+      budgets: L.budgets, loans: L.loans, loan_repayments: L.loan_repayments,
     };
   },
   // Danger zone: wipe transactions + zero balances, but keep accounts/categories/people.
   async resetData() {
     L.expenses = []; L.income = []; L.transfers = [];
     L.recurring_income = []; L.recurring_expenses = []; L.budgets = [];
+    L.loans = []; L.loan_repayments = [];
     (L.accounts || []).forEach((a) => { a.balance = 0; });
     lsave();
   },
@@ -599,6 +651,65 @@ const cloudApi = {
     if (old) { await adjBalCloud(old.from_account, +Number(old.amount)); await adjBalCloud(old.to_account, -Number(old.amount)); }
   },
 
+  // ----- loans (receivables we lent + payables we owe) -----
+  async getLoans() {
+    const [{ data: loans, error }, { data: reps }] = await Promise.all([
+      supabase.from("loans").select("*").order("started_on", { ascending: false }),
+      supabase.from("loan_repayments").select("loan_id,amount"),
+    ]);
+    if (error) throw error;
+    return (loans || []).map((l) => {
+      const repaid = (reps || []).filter((r) => r.loan_id === l.id).reduce((s, r) => s + Number(r.amount), 0);
+      return { ...l, repaid, outstanding: Math.max(0, Number(l.principal) - repaid) };
+    });
+  },
+  async getLoanRepayments(loanId) {
+    const { data, error } = await supabase.from("loan_repayments").select("*")
+      .eq("loan_id", loanId).order("paid_on", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+  async addLoan({ is_lent, counterparty, principal, account_id, note, started_on, due_on }) {
+    const hid = await householdId();
+    const { data, error } = await supabase.from("loans")
+      .insert({ household_id: hid, is_lent: !!is_lent, counterparty: counterparty || "", principal,
+        account_id: account_id || null, note: note || "", started_on, due_on: due_on || null })
+      .select().single();
+    if (error) throw error;
+    await adjBalCloud(account_id, is_lent ? -Number(principal) : +Number(principal));
+    return data;
+  },
+  async deleteLoan(id) {
+    const { data: loan } = await supabase.from("loans").select("is_lent,principal,account_id").eq("id", id).single();
+    const lent = loan?.is_lent;
+    // reverse + remove repayments first
+    const { data: reps } = await supabase.from("loan_repayments").select("amount,account_id").eq("loan_id", id);
+    for (const r of (reps || [])) await adjBalCloud(r.account_id, lent ? -Number(r.amount) : +Number(r.amount));
+    await supabase.from("loan_repayments").delete().eq("loan_id", id);
+    const { error } = await supabase.from("loans").delete().eq("id", id);
+    if (error) throw error;
+    if (loan) await adjBalCloud(loan.account_id, lent ? +Number(loan.principal) : -Number(loan.principal));
+  },
+  async addRepayment({ loan_id, amount, account_id, note, paid_on }) {
+    const hid = await householdId();
+    const { data: loan } = await supabase.from("loans").select("is_lent").eq("id", loan_id).single();
+    const { data, error } = await supabase.from("loan_repayments")
+      .insert({ household_id: hid, loan_id, amount, account_id: account_id || null, note: note || "", paid_on })
+      .select().single();
+    if (error) throw error;
+    if (loan) await adjBalCloud(account_id, loan.is_lent ? +Number(amount) : -Number(amount));
+    return data;
+  },
+  async deleteRepayment(id) {
+    const { data: r } = await supabase.from("loan_repayments").select("amount,account_id,loan_id").eq("id", id).single();
+    const { error } = await supabase.from("loan_repayments").delete().eq("id", id);
+    if (error) throw error;
+    if (r) {
+      const { data: loan } = await supabase.from("loans").select("is_lent").eq("id", r.loan_id).single();
+      if (loan) await adjBalCloud(r.account_id, loan.is_lent ? -Number(r.amount) : +Number(r.amount));
+    }
+  },
+
   async getMonthlyTotals(monthKey, n) {
     const first = addMonthKey(monthKey, -(n - 1));
     const rangeStart = monthStart(first);
@@ -629,7 +740,7 @@ const cloudApi = {
     if (error) throw error;
   },
   async exportData() {
-    const tables = ["accounts", "categories", "expenses", "income", "transfers", "recurring_income", "recurring_expenses", "budgets"];
+    const tables = ["accounts", "categories", "expenses", "income", "transfers", "recurring_income", "recurring_expenses", "budgets", "loans", "loan_repayments"];
     const results = await Promise.all(tables.map((t) => supabase.from(t).select("*")));
     const out = {};
     tables.forEach((t, i) => { out[t] = results[i].data || []; });
@@ -638,7 +749,7 @@ const cloudApi = {
   // Danger zone: wipe transactions + zero balances, keep accounts/categories/people.
   async resetData() {
     const hid = await householdId();
-    const tables = ["expenses", "income", "transfers", "recurring_income", "recurring_expenses", "budgets"];
+    const tables = ["loan_repayments", "loans", "expenses", "income", "transfers", "recurring_income", "recurring_expenses", "budgets"];
     for (const t of tables) {
       const { error } = await supabase.from(t).delete().eq("household_id", hid);
       if (error) throw error;
@@ -649,7 +760,7 @@ const cloudApi = {
   // Danger zone: erase ALL data (incl. custom accounts/categories) and restore defaults.
   async factoryReset() {
     const hid = await householdId();
-    const tables = ["expenses", "income", "transfers", "recurring_income", "recurring_expenses", "budgets", "accounts", "categories"];
+    const tables = ["loan_repayments", "loans", "expenses", "income", "transfers", "recurring_income", "recurring_expenses", "budgets", "accounts", "categories"];
     for (const t of tables) {
       const { error } = await supabase.from(t).delete().eq("household_id", hid);
       if (error) throw error;

@@ -128,6 +128,35 @@ create table if not exists transfers (
 create index if not exists transfers_household_idx on transfers(household_id);
 create index if not exists transfers_moved_on_idx on transfers(moved_on);
 
+-- Loans: money we lent out (is_lent=true, a receivable) or borrowed (is_lent=false, a payable).
+create table if not exists loans (
+  id            uuid primary key default gen_random_uuid(),
+  household_id  uuid not null references households(id) on delete cascade,
+  is_lent       boolean not null,                 -- true = we lent out, false = we borrowed
+  counterparty  text not null default '',         -- free-text name (e.g. 'Tito Boy', 'Home Credit')
+  principal     numeric(12,2) not null check (principal > 0),
+  account_id    uuid references accounts(id) on delete set null,  -- cash account moved on creation (optional)
+  note          text default '',
+  started_on    date not null default current_date,
+  due_on        date,                             -- optional due date
+  created_at    timestamptz not null default now()
+);
+create index if not exists loans_household_idx on loans(household_id);
+
+-- Repayments against a loan (partial payments over time).
+create table if not exists loan_repayments (
+  id            uuid primary key default gen_random_uuid(),
+  household_id  uuid not null references households(id) on delete cascade,
+  loan_id       uuid not null references loans(id) on delete cascade,
+  amount        numeric(12,2) not null check (amount > 0),
+  account_id    uuid references accounts(id) on delete set null,  -- cash account moved (optional)
+  note          text default '',
+  paid_on       date not null default current_date,
+  created_at    timestamptz not null default now()
+);
+create index if not exists loanrepay_household_idx on loan_repayments(household_id);
+create index if not exists loanrepay_loan_idx on loan_repayments(loan_id);
+
 -- Monthly budgets per category (Phase 3). month stored as first day of month.
 create table if not exists budgets (
   id            uuid primary key default gen_random_uuid(),
@@ -160,6 +189,8 @@ alter table recurring_income  enable row level security;
 alter table recurring_expenses enable row level security;
 alter table accounts          enable row level security;
 alter table transfers         enable row level security;
+alter table loans             enable row level security;
+alter table loan_repayments   enable row level security;
 
 -- households: members can see + update their own household
 drop policy if exists hh_select on households;
@@ -218,6 +249,16 @@ create policy recexp_all on recurring_expenses for all
 
 drop policy if exists trf_all on transfers;
 create policy trf_all on transfers for all
+  using (household_id = current_household_id())
+  with check (household_id = current_household_id());
+
+drop policy if exists loans_all on loans;
+create policy loans_all on loans for all
+  using (household_id = current_household_id())
+  with check (household_id = current_household_id());
+
+drop policy if exists loanrepay_all on loan_repayments;
+create policy loanrepay_all on loan_repayments for all
   using (household_id = current_household_id())
   with check (household_id = current_household_id());
 
