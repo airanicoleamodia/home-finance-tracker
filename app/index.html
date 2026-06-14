@@ -21,6 +21,14 @@
       // cached page and your code changes won't show up.
       if (import.meta.env && import.meta.env.PROD) {
         if ("serviceWorker" in navigator) {
+          // When a new service worker takes control, reload once so the page
+          // runs the freshly-deployed HTML/JS instead of the previous build.
+          let reloaded = false;
+          navigator.serviceWorker.addEventListener("controllerchange", () => {
+            if (reloaded) return;
+            reloaded = true;
+            window.location.reload();
+          });
           window.addEventListener("load", () =>
             navigator.serviceWorker.register("/sw.js").catch(() => {})
           );
