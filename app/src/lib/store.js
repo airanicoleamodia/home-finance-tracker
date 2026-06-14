@@ -330,11 +330,10 @@ const cloudApi = {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error; return { ok: true };
   },
-  async signUp(email, password, displayName, householdName) {
-    const { error } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { display_name: displayName, household_name: householdName || "My Household" } },
-    });
+  async signUp(email, password, displayName, householdName, inviteHouseholdId) {
+    const data = { display_name: displayName, household_name: householdName || "My Household" };
+    if (inviteHouseholdId) data.household_id = inviteHouseholdId; // join an existing household
+    const { error } = await supabase.auth.signUp({ email, password, options: { data } });
     if (error) throw error; return { ok: true };
   },
   async signOut() { await supabase.auth.signOut(); },

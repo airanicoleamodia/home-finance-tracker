@@ -153,6 +153,14 @@ export default function Settings({ session, categories, members, onChange }) {
   }
   async function signOut() { await api.signOut(); location.reload(); }
 
+  async function copyInvite() {
+    const id = session?.household?.id;
+    if (!id) { alert("No household id available."); return; }
+    const link = `${window.location.origin}?invite=${id}`;
+    try { await navigator.clipboard.writeText(link); alert("Invite link copied!\n\n" + link); }
+    catch { prompt("Copy this invite link:", link); }
+  }
+
   return (
     <>
       <div className="section-h">Recurring income <span className="pill">{recs.length}</span></div>
@@ -242,7 +250,10 @@ export default function Settings({ session, categories, members, onChange }) {
             <div className="hint">Built to scale — add as many household members as you like.</div>
           </>
         ) : (
-          <div className="hint">New members join by signing up with your household. Share the setup steps from the README.</div>
+          <>
+            <button className="btn ghost" style={{ marginTop: 8 }} onClick={copyInvite}>🔗 Copy invite link</button>
+            <div className="hint">Send this link to family. When they sign up through it, they join this household automatically.</div>
+          </>
         )}
       </div>
 

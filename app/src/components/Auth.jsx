@@ -2,7 +2,9 @@ import { useState } from "react";
 import { api } from "../lib/store.js";
 
 export default function Auth({ onDone }) {
-  const [mode, setMode] = useState("in"); // "in" | "up" | "forgot"
+  // An invite link (?invite=<household_id>) lets a new member join an existing household.
+  const invite = (() => { try { return new URLSearchParams(window.location.search).get("invite") || ""; } catch { return ""; } })();
+  const [mode, setMode] = useState(invite ? "up" : "in"); // "in" | "up" | "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -23,7 +25,7 @@ export default function Auth({ onDone }) {
         await api.signIn(email.trim(), password);
         onDone();
       } else if (mode === "up") {
-        await api.signUp(email.trim(), password, name.trim() || "Member", household.trim() || "My Household");
+        await api.signUp(email.trim(), password, name.trim() || "Member", household.trim() || "My Household", invite);
         setInfo("Account created. If email confirmation is on, check your inbox, then sign in.");
         setMode("in");
       } else if (mode === "forgot") {
@@ -51,10 +53,15 @@ export default function Auth({ onDone }) {
       <form onSubmit={submit}>
         {mode === "up" && (
           <>
+            {invite && <div className="hint" style={{ marginBottom: 10 }}>You're joining an existing household. 🎉</div>}
             <label className="fl">Your name</label>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Maria" />
-            <label className="fl">Household name</label>
-            <input value={household} onChange={(e) => setHousehold(e.target.value)} placeholder="e.g. The Santos Home" />
+            {!invite && (
+              <>
+                <label className="fl">Household name</label>
+                <input value={household} onChange={(e) => setHousehold(e.target.value)} placeholder="e.g. The Santos Home" />
+              </>
+            )}
           </>
         )}
 
