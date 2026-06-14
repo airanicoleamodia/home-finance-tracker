@@ -3,13 +3,14 @@ import { api } from "../lib/store.js";
 import { CURRENCY, todayISO } from "../lib/format.js";
 
 // Handles both EXPENSE and INCOME entries (add + edit), plus recurring income.
-export default function ExpenseSheet({ open, kind: initialKind, entry, categories, members, onClose, onSaved }) {
+export default function ExpenseSheet({ open, kind: initialKind, entry, categories, members, accounts = [], onClose, onSaved }) {
   const editing = Boolean(entry);
   const [kind, setKind] = useState("expense"); // "expense" | "income"
   const [amount, setAmount] = useState("");
   const [catId, setCatId] = useState(null);
   const [source, setSource] = useState("Salary");
   const [who, setWho] = useState(null);
+  const [accId, setAccId] = useState(null); // which account income lands in
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
   const [repeat, setRepeat] = useState(false);
@@ -26,9 +27,10 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
     setCatId(entry && k === "expense" ? entry.category_id : categories[0]?.id ?? null);
     setSource(entry && k === "income" ? entry.source || "Income" : "Salary");
     setWho(entry ? (k === "expense" ? entry.paid_by : entry.received_by) : members[0]?.id ?? null);
+    setAccId(accounts[0]?.id ?? null);
     setDate(entry ? (k === "expense" ? entry.spent_on : entry.received_on) : todayISO());
     setNote(entry ? entry.note || "" : "");
-  }, [open, entry, initialKind, categories, members, editing]);
+  }, [open, entry, initialKind, categories, members, accounts, editing]);
 
   async function save() {
     const amt = parseFloat(String(amount).replace(/[^0-9.]/g, ""));
@@ -50,7 +52,12 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
         } else {
           const payload = { amount: amt, source: source.trim() || "Income", received_by: who, note: note.trim(), received_on: date };
           if (editing) await api.updateIncome(entry.id, payload);
-          else await api.addIncome(payload);
+          else {
+            await api.addIncome(payload);
+            // New one-time income lands in the chosen account: add to its balance.
+            const acc = accounts.find((a) => a.id === accId);
+            if (acc) await api.updateAccount(acc.id, { balance: Number(acc.balance || 0) + amt });
+          }
         }
       }
       onSaved(editing ? null : date);
@@ -117,6 +124,20 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
                   onClick={() => setWho(m.id)}>👤 {m.display_name}</button>
               ))}
             </div>
+
+            {!editing && !repeat && accounts.length > 0 && (
+              <>
+                <label className="fl">Goes to which account</label>
+                <div className="chips">
+                  {accounts.map((a) => (
+                    <button type="button" key={a.id}
+                      className={"chip" + (a.id === accId ? " sel" : "")}
+                      onClick={() => setAccId(a.id)}>{a.icon} {a.name}</button>
+                  ))}
+                </div>
+                <div className="hint" style={{ margin: "6px 2px 0" }}>This amount is added to that account's balance.</div>
+              </>
+            )}
 
             <label className="fl">Date received</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />

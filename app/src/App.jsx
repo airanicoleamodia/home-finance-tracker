@@ -29,6 +29,7 @@ export default function App() {
   const [cur, setCur] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [categories, setCategories] = useState([]);
   const [members, setMembers] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [sheet, setSheet] = useState({ open: false, kind: "expense", entry: null });
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState(null);
@@ -68,6 +69,7 @@ export default function App() {
       try {
         setCategories(await api.getCategories());
         setMembers(await api.getMembers());
+        try { setAccounts(await api.getAccounts()); } catch { setAccounts([]); }
       } catch (e) { console.error(e); }
     })();
   }, [session, refreshKey]);
@@ -178,6 +180,7 @@ export default function App() {
         entry={sheet.entry}
         categories={categories}
         members={members}
+        accounts={accounts}
         onClose={closeSheet}
         onSaved={(date) => {
           if (date) { const d = new Date(date + "T00:00:00"); d.setDate(1); setCur(d); }
