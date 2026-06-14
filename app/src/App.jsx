@@ -9,9 +9,23 @@ import Settings from "./components/Settings.jsx";
 import ExpenseSheet from "./components/ExpenseSheet.jsx";
 import ResetPassword from "./components/ResetPassword.jsx";
 
+const TABS = ["dashboard", "history", "budgets", "settings"];
+
+// Each tab is a hash route (#/dashboard, #/history, …) so the browser keeps a
+// history entry per page. That makes the phone's Back button move between tabs
+// (and close the add/edit sheet) instead of leaving the app.
+function parseHash() {
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  const [t, sub] = raw.split("/");
+  return {
+    tab: TABS.includes(t) ? t : "dashboard",
+    sheetOpen: sub === "add" || sub === "edit",
+  };
+}
+
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined=loading
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState(() => parseHash().tab);
   const [cur, setCur] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [categories, setCategories] = useState([]);
   const [members, setMembers] = useState([]);
@@ -59,6 +73,40 @@ export default function App() {
   }, [session, refreshKey]);
 
   const refresh = () => setRefreshKey((k) => k + 1);
+
+  // Keep React state in sync with the URL hash, and react to Back/Forward.
+  useEffect(() => {
+    const { tab: t, sheetOpen } = parseHash();
+    // Normalise on first load: always have a tab route, and never restore the
+    // sheet from the URL (we have no entry to edit after a refresh).
+    if (!window.location.hash || sheetOpen) {
+      window.history.replaceState(null, "", "#/" + t);
+    }
+
+    const onHash = () => {
+      const next = parseHash();
+      setTab(next.tab);
+      // Back button left the sheet route -> close the sheet.
+      if (!next.sheetOpen) {
+        setSheet((s) => (s.open ? { open: false, kind: "expense", entry: null } : s));
+      }
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  // Switch tabs by changing the hash, which pushes a new history entry.
+  const goTab = (id) => { window.location.hash = "#/" + id; };
+
+  // Opening the sheet pushes a history entry so Back (or the × icon) closes it.
+  const openSheet = (kind, entry) => {
+    setSheet({ open: true, kind, entry });
+    window.location.hash = "#/" + parseHash().tab + "/" + (entry ? "edit" : "add");
+  };
+  const closeSheet = () => {
+    if (parseHash().sheetOpen) window.history.back();
+    else setSheet({ open: false, kind: "expense", entry: null });
+  };
 
   // Returning from the reset email: let the user set a new password.
   if (MODE === "cloud" && recovering) {
@@ -109,19 +157,19 @@ export default function App() {
         {tab === "dashboard" && <Dashboard cur={cur} categories={categories} refreshKey={refreshKey} />}
         {tab === "history" && (
           <History cur={cur} categories={categories} members={members} refreshKey={refreshKey}
-                   onEdit={(kind, entry) => setSheet({ open: true, kind, entry })} />
+                   onEdit={(kind, entry) => openSheet(kind, entry)} />
         )}
         {tab === "budgets" && <Budgets cur={cur} categories={categories} refreshKey={refreshKey} onChange={refresh} />}
         {tab === "settings" && <Settings session={session} categories={categories} members={members} onChange={refresh} />}
       </main>
 
-      <button className="fab" aria-label="Add entry" onClick={() => setSheet({ open: true, kind: "expense", entry: null })}>+</button>
+      <button className="fab" aria-label="Add entry" onClick={() => openSheet("expense", null)}>+</button>
 
       <nav className="tabs">
-        <Tab id="dashboard" cur={tab} set={setTab} icon="📊" label="Dashboard" />
-        <Tab id="history" cur={tab} set={setTab} icon="🧾" label="History" />
-        <Tab id="budgets" cur={tab} set={setTab} icon="🎯" label="Budgets" />
-        <Tab id="settings" cur={tab} set={setTab} icon="⚙️" label="Settings" />
+        <Tab id="dashboard" cur={tab} set={goTab} icon="📊" label="Dashboard" />
+        <Tab id="history" cur={tab} set={goTab} icon="🧾" label="History" />
+        <Tab id="budgets" cur={tab} set={goTab} icon="🎯" label="Budgets" />
+        <Tab id="settings" cur={tab} set={goTab} icon="⚙️" label="Settings" />
       </nav>
 
       <ExpenseSheet
@@ -130,10 +178,10 @@ export default function App() {
         entry={sheet.entry}
         categories={categories}
         members={members}
-        onClose={() => setSheet({ open: false, kind: "expense", entry: null })}
+        onClose={closeSheet}
         onSaved={(date) => {
           if (date) { const d = new Date(date + "T00:00:00"); d.setDate(1); setCur(d); }
-          setSheet({ open: false, kind: "expense", entry: null });
+          closeSheet();
           refresh();
         }}
       />
