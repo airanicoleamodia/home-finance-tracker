@@ -147,6 +147,7 @@ export default function App() {
         <div className="sub">
           {session?.household?.name || "My Household"}
           <span className={"mode " + MODE}>{MODE === "cloud" ? "Shared" : "Local"}</span>
+          <span className="who">👤 {session?.user?.display_name || "You"}{session?.user?.role === "admin" ? " · admin" : ""}</span>
         </div>
         {showMonth && (
           <div className="month">

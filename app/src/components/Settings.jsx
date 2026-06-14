@@ -316,8 +316,12 @@ export default function Settings({ session, categories, members, onChange }) {
 
       <div className="section-h">Account &amp; data</div>
       <div className="card" style={{ padding: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 2 }}>
+          👤 Logged in as {session?.user?.display_name || "You"}
+          {isAdmin && <span className="pill" style={{ marginLeft: 6, background: "var(--brand-soft)", color: "#0b554f" }}>admin</span>}
+        </div>
         <div className="hint" style={{ margin: "0 0 12px" }}>
-          Mode: {MODE === "cloud" ? "Shared (cloud)" : "Local (this device)"}
+          {session?.household?.name || "My Household"} · Mode: {MODE === "cloud" ? "Shared (cloud)" : "Local (this device)"}
         </div>
         <button className="btn ghost" onClick={exportCSV}>⬇️ Export CSV</button>
         <button className="btn ghost" onClick={exportBackup}>⬇️ Export backup (.json)</button>
