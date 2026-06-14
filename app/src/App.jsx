@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { api, MODE } from "./lib/store.js";
-import { MONTHS } from "./lib/format.js";
+import { MONTHS, setCurrency } from "./lib/format.js";
 import Auth from "./components/Auth.jsx";
 import Dashboard from "./components/Dashboard.jsx";
 import History from "./components/History.jsx";
@@ -65,6 +65,7 @@ export default function App() {
   // Load reference data once we have a session.
   useEffect(() => {
     if (!session) return;
+    setCurrency(session.household?.currency); // apply household currency app-wide
     (async () => {
       try {
         setCategories(await api.getCategories());

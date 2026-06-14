@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api, MODE } from "../lib/store.js";
-import { CURRENCY, fmt, hexA } from "../lib/format.js";
+import { CURRENCY, CURRENCY_CODE, CURRENCIES, CURRENCY_SYMBOLS, setCurrency, fmt, hexA } from "../lib/format.js";
 
 const ACCOUNT_ICONS = ["💵", "🏦", "📱", "🐷", "💳", "💰", "📦"];
 
@@ -69,7 +69,32 @@ export default function Settings({ session, categories, members, onChange }) {
   async function delRec(id) {
     try { await api.deleteRecurringIncome(id); await loadRecs(); onChange(); } catch (e) { alert(e.message); }
   }
+
+  // recurring expenses
+  const [recExp, setRecExp] = useState([]);
+  async function loadRecExp() {
+    try { setRecExp(await api.getRecurringExpenses()); } catch { setRecExp([]); }
+  }
+  useEffect(() => { loadRecExp(); }, []);
+  async function delRecExp(id) {
+    try { await api.deleteRecurringExpense(id); await loadRecExp(); onChange(); } catch (e) { alert(e.message); }
+  }
+  const catOf = (id) => categories.find((c) => c.id === id) || { name: "Uncategorized", icon: "🏷️", color: "#6b7280" };
   const whoName = (id) => members.find((m) => m.id === id)?.display_name || "—";
+
+  // currency + theme
+  const [curCode, setCurCode] = useState(CURRENCY_CODE);
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark");
+
+  async function changeCurrency(code) {
+    setCurCode(code); setCurrency(code);
+    try { await api.updateHouseholdCurrency(code); onChange(); } catch (e) { alert(e.message); }
+  }
+  function toggleDark() {
+    const next = !dark; setDark(next);
+    document.documentElement.dataset.theme = next ? "dark" : "";
+    try { localStorage.setItem("hft_theme", next ? "dark" : "light"); } catch (e) {}
+  }
 
   async function addPerson() {
     if (!newPerson.trim()) return;
@@ -89,18 +114,39 @@ export default function Settings({ session, categories, members, onChange }) {
     finally { setBusy(false); }
   }
   async function delCat(id) {
+    if (!confirm("Delete this category? Existing expenses will become Uncategorized.")) return;
     try { await api.deleteCategory(id); onChange(); } catch (e) { alert(e.message); }
   }
 
-  function exportBackup() {
-    const data = api.exportData();
-    if (!data) { alert("Cloud data lives in Supabase — use the dashboard to export."); return; }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  function download(name, text, type) {
+    const blob = new Blob([text], { type });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "home-finance-backup.json";
+    a.download = name;
     a.click();
   }
+  async function exportBackup() {
+    try {
+      const data = await api.exportData();
+      download("home-finance-backup.json", JSON.stringify(data, null, 2), "application/json");
+    } catch (e) { alert(e.message); }
+  }
+  async function exportCSV() {
+    try {
+      const data = await api.exportData();
+      const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const rows = [["type", "date", "amount", "category/source", "who", "account", "note"]];
+      (data.expenses || []).forEach((e) =>
+        rows.push(["expense", e.spent_on, e.amount, catOf(e.category_id).name, whoName(e.paid_by), accNameById(e.account_id), e.note]));
+      (data.income || []).forEach((e) =>
+        rows.push(["income", e.received_on, e.amount, e.source, whoName(e.received_by), accNameById(e.account_id), e.note]));
+      (data.transfers || []).forEach((t) =>
+        rows.push(["transfer", t.moved_on, t.amount, "", "", `${accNameById(t.from_account)} -> ${accNameById(t.to_account)}`, t.note]));
+      const csv = rows.map((r) => r.map(esc).join(",")).join("\n");
+      download("home-finance-export.csv", csv, "text/csv");
+    } catch (e) { alert(e.message); }
+  }
+  const accNameById = (id) => accounts.find((a) => a.id === id)?.name || "";
   async function clearAll() {
     if (!confirm("Delete ALL local data on this device? This cannot be undone.")) return;
     await api.clearAll(); onChange();
@@ -129,7 +175,22 @@ export default function Settings({ session, categories, members, onChange }) {
           </select>
         </div>
         <button className="btn" onClick={addRec} disabled={busy} style={{ marginTop: 12 }}>Add recurring income</button>
-        <div className="hint">e.g. ₱30,000 Salary on day 15 — auto-counted every month.</div>
+        <div className="hint">e.g. {CURRENCY}30,000 Salary on day 15 — auto-counted every month.</div>
+      </div>
+
+      <div className="section-h">Recurring expenses <span className="pill">{recExp.length}</span></div>
+      <div className="card" style={{ padding: "6px 16px 16px" }}>
+        {recExp.length === 0 && <div className="hint" style={{ padding: "10px 0" }}>No recurring expenses yet. Add rent, tuition or subscriptions from the <strong>+</strong> button (tick "Repeat every month").</div>}
+        {recExp.map((r) => {
+          const c = catOf(r.category_id);
+          return (
+            <div className="mgr-row" key={r.id}>
+              <div className="ic" style={{ background: hexA(c.color, 0.14), width: 32, height: 32, borderRadius: 9, fontSize: 16 }}>{c.icon}</div>
+              <div className="nm">{c.name} · {fmt(r.amount)}<div className="hint" style={{ margin: 0 }}>day {r.day_of_month} · {whoName(r.paid_by)}{r.note ? " · " + r.note : ""}</div></div>
+              <button className="x" onClick={() => delRecExp(r.id)}>✕</button>
+            </div>
+          );
+        })}
       </div>
 
       <div className="section-h">
@@ -203,12 +264,28 @@ export default function Settings({ session, categories, members, onChange }) {
         <div className="hint">Standard list plus your own additions.</div>
       </div>
 
+      <div className="section-h">Preferences</div>
+      <div className="card" style={{ padding: 16 }}>
+        <label className="fl" style={{ marginTop: 0 }}>Currency</label>
+        <select value={curCode} onChange={(e) => changeCurrency(e.target.value)}>
+          {CURRENCIES.map((code) => (
+            <option key={code} value={code}>{CURRENCY_SYMBOLS[code]} {code}</option>
+          ))}
+        </select>
+
+        <label className="switch" style={{ marginTop: 14 }}>
+          <input type="checkbox" checked={dark} onChange={toggleDark} />
+          <span>Dark mode 🌙</span>
+        </label>
+      </div>
+
       <div className="section-h">Account &amp; data</div>
       <div className="card" style={{ padding: 16 }}>
         <div className="hint" style={{ margin: "0 0 12px" }}>
-          Currency: {CURRENCY} Philippine Peso · Mode: {MODE === "cloud" ? "Shared (cloud)" : "Local (this device)"}
+          Mode: {MODE === "cloud" ? "Shared (cloud)" : "Local (this device)"}
         </div>
-        {MODE === "local" && <button className="btn ghost" onClick={exportBackup}>⬇️ Export backup (.json)</button>}
+        <button className="btn ghost" onClick={exportCSV}>⬇️ Export CSV</button>
+        <button className="btn ghost" onClick={exportBackup}>⬇️ Export backup (.json)</button>
         {MODE === "local"
           ? <button className="btn danger" onClick={clearAll}>Clear all data</button>
           : <button className="btn ghost" onClick={signOut}>Sign out</button>}
@@ -239,9 +316,16 @@ function AccountRow({ a, onSave, onDelete }) {
     if (v !== Number(a.balance)) onSave(a.id, { balance: v }); else setBal(String(a.balance));
   };
 
+  // Tap the icon to cycle through the presets (saved immediately).
+  const cycleIcon = () => {
+    const i = ACCOUNT_ICONS.indexOf(a.icon);
+    onSave(a.id, { icon: ACCOUNT_ICONS[(i + 1) % ACCOUNT_ICONS.length] });
+  };
+
   return (
     <div className="mgr-row">
-      <div className="ic" style={{ width: 32, height: 32, borderRadius: 9, fontSize: 16, background: "#f0f2f2", display: "flex", alignItems: "center", justifyContent: "center" }}>{a.icon}</div>
+      <button type="button" className="ic" onClick={cycleIcon} title="Tap to change icon"
+        style={{ width: 32, height: 32, borderRadius: 9, fontSize: 16, background: "#f0f2f2", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer", padding: 0 }}>{a.icon}</button>
       <input className="acc-name" value={name} maxLength={28}
         onChange={(e) => setName(e.target.value)} onBlur={saveName}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />

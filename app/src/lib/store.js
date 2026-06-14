@@ -289,7 +289,15 @@ const localApi = {
     return out;
   },
 
-  exportData() { return L; },
+  async updateHouseholdCurrency(code) { L.household.currency = code; lsave(); return L.household; },
+  async exportData() {
+    return {
+      accounts: L.accounts, categories: L.categories, members: L.members,
+      expenses: L.expenses, income: L.income, transfers: L.transfers,
+      recurring_income: L.recurring_income, recurring_expenses: L.recurring_expenses,
+      budgets: L.budgets,
+    };
+  },
   async clearAll() { localStorage.removeItem(LKEY); L = readStore(); },
 };
 
@@ -576,7 +584,18 @@ const cloudApi = {
     return out;
   },
 
-  exportData() { return null; },
+  async updateHouseholdCurrency(code) {
+    const hid = await householdId();
+    const { error } = await supabase.from("households").update({ currency: code }).eq("id", hid);
+    if (error) throw error;
+  },
+  async exportData() {
+    const tables = ["accounts", "categories", "expenses", "income", "transfers", "recurring_income", "recurring_expenses", "budgets"];
+    const results = await Promise.all(tables.map((t) => supabase.from(t).select("*")));
+    const out = {};
+    tables.forEach((t, i) => { out[t] = results[i].data || []; });
+    return out;
+  },
   async clearAll() { throw new Error("Cloud data is shared — delete items individually."); },
 };
 

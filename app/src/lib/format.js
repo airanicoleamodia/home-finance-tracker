@@ -1,8 +1,23 @@
-export const CURRENCY = "₱";
+// Supported currencies (symbol shown in the UI). Add more as needed.
+export const CURRENCY_SYMBOLS = {
+  PHP: "₱", USD: "$", EUR: "€", GBP: "£", JPY: "¥",
+  AUD: "A$", CAD: "C$", SGD: "S$", HKD: "HK$", INR: "₹",
+  MYR: "RM", THB: "฿", IDR: "Rp", AED: "د.إ", KRW: "₩",
+};
+export const CURRENCIES = Object.keys(CURRENCY_SYMBOLS);
+
+// `CURRENCY` is a live ESM binding: setCurrency() updates it and every
+// importer (and fmt below) sees the new symbol on the next render.
+export let CURRENCY = "₱";
+export let CURRENCY_CODE = "PHP";
+export function setCurrency(code) {
+  CURRENCY_CODE = code || "PHP";
+  CURRENCY = CURRENCY_SYMBOLS[CURRENCY_CODE] || CURRENCY_CODE + " ";
+}
 
 export const fmt = (n) =>
   CURRENCY +
-  Number(n || 0).toLocaleString("en-PH", {
+  Number(n || 0).toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });

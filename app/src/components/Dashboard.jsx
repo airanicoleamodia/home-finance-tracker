@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/store.js";
-import { fmt, ymKey, MONTHS, PALETTE } from "../lib/format.js";
+import { fmt, ymKey, MONTHS, PALETTE, hexA } from "../lib/format.js";
 
 export default function Dashboard({ cur, categories, refreshKey }) {
   const [data, setData] = useState(null);
@@ -72,18 +72,119 @@ export default function Dashboard({ cur, categories, refreshKey }) {
         )}
       </div>
 
-      {/* Trends */}
-      <div className="section-h">6-month trend</div>
-      <Trend trend={trend} />
-
-      {/* Category breakdown */}
       {expenses.length === 0 ? (
         <div className="card empty" style={{ marginTop: 16 }}><div className="em">🪙</div>
           <div className="et">No expenses yet this month.<br />Tap + to add income or an expense.</div></div>
       ) : (
-        <Breakdown expenses={expenses} total={totalExp} catOf={catOf} />
+        <>
+          <div className="section-h">Spending by category</div>
+          <SpendByCategory expenses={expenses} total={totalExp} catOf={catOf} />
+
+          <div className="section-h">Spending by account</div>
+          <SpendByAccount expenses={expenses} accounts={accounts} />
+        </>
       )}
+
+      {/* Trends */}
+      <div className="section-h">6-month trend</div>
+      <Trend trend={trend} />
     </>
+  );
+}
+
+function SpendByCategory({ expenses, total, catOf }) {
+  if (!expenses.length || total <= 0) {
+    return (
+      <div className="card" style={{ padding: 14 }}>
+        <div className="hint" style={{ padding: "6px 0" }}>No expenses to chart this month.</div>
+      </div>
+    );
+  }
+  const by = {};
+  expenses.forEach((e) => { by[e.category_id] = (by[e.category_id] || 0) + Number(e.amount); });
+  const groups = Object.entries(by)
+    .map(([id, v]) => ({ id, v, c: catOf(id) }))
+    .sort((a, b) => b.v - a.v);
+
+  const R = 54, C = 2 * Math.PI * R;
+  let acc = 0;
+  const segs = groups.map((g, i) => {
+    const frac = g.v / total;
+    const s = { ...g, col: g.c.color || PALETTE[i % PALETTE.length], len: frac * C, off: C - acc * C };
+    acc += frac;
+    return s;
+  });
+
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
+        <svg viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Spending by category" style={{ flex: "0 0 auto" }}>
+          <circle r={R} cx="60" cy="60" fill="none" stroke="#eef1f0" strokeWidth="14" />
+          {segs.map((s, i) => (
+            <circle key={i} r={R} cx="60" cy="60" fill="none" stroke={s.col} strokeWidth="14"
+              strokeDasharray={`${s.len} ${C - s.len}`} strokeDashoffset={s.off}
+              transform="rotate(-90 60 60)" strokeLinecap="butt" />
+          ))}
+          <text x="60" y="56" textAnchor="middle" fontSize="11" fill="#6b7a77">Total</text>
+          <text x="60" y="72" textAnchor="middle" fontSize="13" fontWeight="700" fill="#0f172a">{fmt(total)}</text>
+        </svg>
+        <div style={{ flex: "1 1 160px", minWidth: 160, display: "flex", flexDirection: "column", gap: 8 }}>
+          {segs.map((s, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+              <span style={{ width: 12, height: 12, borderRadius: 4, background: s.col, flex: "0 0 auto" }} />
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.c.icon} {s.c.name}</span>
+              <strong style={{ flex: "0 0 auto" }}>{fmt(s.v)}</strong>
+              <span style={{ flex: "0 0 auto", color: "#6b7a77", fontSize: 12, width: 34, textAlign: "right" }}>{Math.round((s.v / total) * 100)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SpendByAccount({ expenses, accounts }) {
+  if (!expenses.length) {
+    return (
+      <div className="card" style={{ padding: 14 }}>
+        <div className="hint" style={{ padding: "6px 0" }}>No expenses to chart this month.</div>
+      </div>
+    );
+  }
+  const accOf = (id) => (accounts || []).find((a) => a.id === id);
+  const by = {};
+  expenses.forEach((e) => {
+    const key = e.account_id == null ? "__none__" : e.account_id;
+    by[key] = (by[key] || 0) + Number(e.amount);
+  });
+  const rows = Object.entries(by)
+    .map(([key, v], i) => {
+      const a = key === "__none__" ? null : accOf(key);
+      return {
+        key,
+        v,
+        name: a ? a.name : "Unassigned",
+        icon: a ? a.icon : "🗂️",
+        color: (a && a.color) || PALETTE[i % PALETTE.length],
+      };
+    })
+    .sort((a, b) => b.v - a.v);
+  const max = Math.max(1, ...rows.map((r) => r.v));
+
+  return (
+    <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+      {rows.map((r) => (
+        <div key={r.key}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.icon} {r.name}</span>
+            <strong style={{ flex: "0 0 auto", marginLeft: 8 }}>{fmt(r.v)}</strong>
+          </div>
+          <div style={{ height: 10, borderRadius: 6, background: hexA(r.color, 0.14), overflow: "hidden" }}>
+            <div style={{ height: "100%", width: Math.max(4, (r.v / max) * 100) + "%", borderRadius: 6, background: r.color }} />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -115,60 +216,5 @@ function Trend({ trend }) {
         <span><i style={{ background: "#cbd5d2" }} /> Spent</span>
       </div>
     </div>
-  );
-}
-
-function Breakdown({ expenses, total, catOf }) {
-  const by = {};
-  expenses.forEach((e) => { by[e.category_id] = (by[e.category_id] || 0) + Number(e.amount); });
-  const groups = Object.entries(by).map(([id, v]) => ({ id, v, c: catOf(id) })).sort((a, b) => b.v - a.v);
-
-  let acc = 0;
-  const R = 54, C = 2 * Math.PI * R;
-  const segs = groups.map((g, i) => {
-    const frac = g.v / total;
-    const s = { ...g, col: g.c.color || PALETTE[i % PALETTE.length], len: frac * C, off: C - acc * C };
-    acc += frac; return s;
-  });
-  const max = groups[0].v;
-
-  return (
-    <>
-      <div className="section-h">Where the money went</div>
-      <div className="card">
-        <div className="chart-wrap">
-          <svg className="donut" viewBox="0 0 120 120" width="120" height="120">
-            <circle r={R} cx="60" cy="60" fill="none" stroke="#eef1f0" strokeWidth="14" />
-            {segs.map((s, i) => (
-              <circle key={i} r={R} cx="60" cy="60" fill="none" stroke={s.col} strokeWidth="14"
-                strokeDasharray={`${s.len} ${C - s.len}`} strokeDashoffset={s.off}
-                transform="rotate(-90 60 60)" />
-            ))}
-            <text x="60" y="58" textAnchor="middle" fontSize="20">{groups[0].c.icon}</text>
-            <text x="60" y="74" textAnchor="middle" fontSize="9" fill="#6b7a77">top</text>
-          </svg>
-          <div className="legend">
-            {segs.slice(0, 6).map((s, i) => (
-              <div className="legend-row" key={i}>
-                <span className="sw" style={{ background: s.col }} />
-                <span className="nm">{s.c.icon} {s.c.name}</span>
-                <span className="vl">{fmt(s.v)}</span>
-                <span className="pc">{Math.round((s.v / total) * 100)}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="section-h">By category</div>
-      <div className="card cat-bars">
-        {groups.map((g) => (
-          <div className="bar-row" key={g.id}>
-            <div className="bar-top"><span className="nm">{g.c.icon} {g.c.name}</span><span className="vl">{fmt(g.v)}</span></div>
-            <div className="bar-track"><div className="bar-fill" style={{ width: Math.max(4, (g.v / max) * 100) + "%", background: g.c.color }} /></div>
-          </div>
-        ))}
-      </div>
-    </>
   );
 }
