@@ -90,6 +90,21 @@ describe("account balance integrity (local mode)", () => {
     expect(accounts.every((a) => a.balance === 0)).toBe(true);
   });
 
+  it("stores an optional item breakdown on an expense and updates it", async () => {
+    const e = await api.addExpense({ amount: 500, account_id: "a0", spent_on: "2026-06-02", items: ["Milk", "Eggs", "Bread"] });
+    let saved = (await api.getExpenses("2026-06")).find((x) => x.id === e.id);
+    expect(saved.items).toEqual(["Milk", "Eggs", "Bread"]);
+    await api.updateExpense(e.id, { amount: 500, account_id: "a0", spent_on: "2026-06-02", items: ["Milk"] });
+    saved = (await api.getExpenses("2026-06")).find((x) => x.id === e.id);
+    expect(saved.items).toEqual(["Milk"]);
+  });
+
+  it("defaults items to an empty array when omitted", async () => {
+    const e = await api.addExpense({ amount: 100, account_id: "a0", spent_on: "2026-06-02" });
+    const saved = (await api.getExpenses("2026-06")).find((x) => x.id === e.id);
+    expect(saved.items).toEqual([]);
+  });
+
   it("addIncome increases the account balance by the amount", async () => {
     await api.addIncome({ amount: 1500, account_id: "a1", received_on: "2026-06-01" });
     expect(await balanceOf("a1")).toBe(1500);

@@ -138,13 +138,13 @@ export default function Settings({ session, categories, members, onChange }) {
     try {
       const data = await api.exportData();
       const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-      const rows = [["type", "date", "amount", "category/source", "who", "account", "note"]];
+      const rows = [["type", "date", "amount", "category/source", "who", "account", "note", "items"]];
       (data.expenses || []).forEach((e) =>
-        rows.push(["expense", e.spent_on, e.amount, catOf(e.category_id).name, whoName(e.paid_by), accNameById(e.account_id), e.note]));
+        rows.push(["expense", e.spent_on, e.amount, catOf(e.category_id).name, whoName(e.paid_by), accNameById(e.account_id), e.note, (Array.isArray(e.items) ? e.items.join("; ") : "")]));
       (data.income || []).forEach((e) =>
-        rows.push(["income", e.received_on, e.amount, e.source, whoName(e.received_by), accNameById(e.account_id), e.note]));
+        rows.push(["income", e.received_on, e.amount, e.source, whoName(e.received_by), accNameById(e.account_id), e.note, ""]));
       (data.transfers || []).forEach((t) =>
-        rows.push(["transfer", t.moved_on, t.amount, "", "", `${accNameById(t.from_account)} -> ${accNameById(t.to_account)}`, t.note]));
+        rows.push(["transfer", t.moved_on, t.amount, "", "", `${accNameById(t.from_account)} -> ${accNameById(t.to_account)}`, t.note, ""]));
       const csv = rows.map((r) => r.map(esc).join(",")).join("\n");
       download("home-finance-export.csv", csv, "text/csv");
     } catch (e) { alert(e.message); }

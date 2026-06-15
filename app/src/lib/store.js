@@ -186,8 +186,9 @@ const localApi = {
     return [...real, ...virtual]
       .sort((a, b) => b.spent_on.localeCompare(a.spent_on) || (b.created || 0) - (a.created || 0));
   },
-  async addExpense({ amount, category_id, paid_by, account_id, note, spent_on }) {
-    const e = { id: uid(), amount: +amount, category_id, paid_by, account_id: account_id || null, note: note || "", spent_on, created: Date.now() };
+  async addExpense({ amount, category_id, paid_by, account_id, note, spent_on, items }) {
+    const e = { id: uid(), amount: +amount, category_id, paid_by, account_id: account_id || null,
+      items: Array.isArray(items) ? items : [], note: note || "", spent_on, created: Date.now() };
     L.expenses.push(e); adjBal(e.account_id, -e.amount); lsave(); return e;
   },
   async updateExpense(id, patch) {
@@ -494,11 +495,11 @@ const cloudApi = {
     const virtual = expandRecurringExp(eRows, monthKey);
     return [...real, ...virtual].sort((a, b) => b.spent_on.localeCompare(a.spent_on));
   },
-  async addExpense({ amount, category_id, paid_by, account_id, note, spent_on }) {
+  async addExpense({ amount, category_id, paid_by, account_id, note, spent_on, items }) {
     const hid = await householdId();
     const me = (await supabase.auth.getUser()).data.user?.id;
     const { data, error } = await supabase.from("expenses")
-      .insert({ household_id: hid, amount, category_id, paid_by, account_id: account_id || null, note, spent_on, created_by: me })
+      .insert({ household_id: hid, amount, category_id, paid_by, account_id: account_id || null, items: Array.isArray(items) ? items : [], note, spent_on, created_by: me })
       .select().single();
     if (error) throw error;
     await adjBalCloud(account_id, -Number(amount));
@@ -507,7 +508,7 @@ const cloudApi = {
   async updateExpense(id, patch) {
     const { data: old } = await supabase.from("expenses").select("amount,account_id").eq("id", id).single();
     const { data, error } = await supabase.from("expenses")
-      .update({ amount: patch.amount, category_id: patch.category_id, paid_by: patch.paid_by, account_id: patch.account_id ?? old?.account_id ?? null, note: patch.note, spent_on: patch.spent_on })
+      .update({ amount: patch.amount, category_id: patch.category_id, paid_by: patch.paid_by, account_id: patch.account_id ?? old?.account_id ?? null, items: Array.isArray(patch.items) ? patch.items : [], note: patch.note, spent_on: patch.spent_on })
       .eq("id", id).select().single();
     if (error) throw error;
     if (old) await adjBalCloud(old.account_id, +Number(old.amount)); // reverse old

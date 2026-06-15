@@ -131,7 +131,8 @@ export default function History({ cur, categories, members, accounts = [], refre
             const c = catOf(r.category_id);
             const isFee = Boolean(r.transfer_id);
             const clickable = !r.recurring && !isFee;
-            const sub = `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${nameOf(r.paid_by)}${r.account_id ? " · " + accName(r.account_id) : ""}${r.note ? " · " + r.note : ""}`;
+            const itemsTxt = Array.isArray(r.items) && r.items.length ? " · 📋 " + r.items.join(", ") : "";
+            const sub = `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${nameOf(r.paid_by)}${r.account_id ? " · " + accName(r.account_id) : ""}${r.note ? " · " + r.note : ""}${itemsTxt}`;
             return (
               <button className="item" key={r.id} disabled={!clickable}
                 style={!clickable ? { cursor: "default" } : undefined}

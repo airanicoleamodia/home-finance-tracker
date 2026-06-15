@@ -61,6 +61,7 @@ create table if not exists expenses (
   paid_by       uuid references profiles(id) on delete set null, -- who paid
   account_id    uuid references accounts(id) on delete set null, -- paid from which account
   transfer_id   uuid,                                            -- set when this expense is a transfer fee
+  items         jsonb not null default '[]'::jsonb,              -- optional breakdown of what's included
   note          text default '',
   spent_on      date not null default current_date,
   created_by    uuid references profiles(id) on delete set null,
@@ -268,6 +269,7 @@ create policy loanrepay_all on loan_repayments for all
 alter table expenses add column if not exists account_id uuid references accounts(id) on delete set null;
 alter table income   add column if not exists account_id uuid references accounts(id) on delete set null;
 alter table expenses  add column if not exists transfer_id uuid;
+alter table expenses  add column if not exists items jsonb not null default '[]'::jsonb;
 alter table transfers add column if not exists fee numeric(12,2) not null default 0;
 alter table profiles  add column if not exists role text not null default 'member';
 -- Backfill: the earliest profile in each household (its creator) becomes admin.

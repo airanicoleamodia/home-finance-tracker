@@ -14,6 +14,7 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
   const [fromAcc, setFromAcc] = useState(null); // transfer: source account
   const [toAcc, setToAcc] = useState(null);     // transfer: destination account
   const [fee, setFee] = useState("");           // transfer: optional fee (becomes an expense)
+  const [items, setItems] = useState([]);       // expense: optional breakdown bullets
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
   const [repeat, setRepeat] = useState(false);
@@ -34,6 +35,7 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
     setFromAcc(accounts[0]?.id ?? null);
     setToAcc(accounts[1]?.id ?? accounts[0]?.id ?? null);
     setFee("");
+    setItems(entry && k === "expense" && Array.isArray(entry.items) ? entry.items : []);
     setDate(entry ? (k === "expense" ? entry.spent_on : entry.received_on) : todayISO());
     setNote(entry ? entry.note || "" : "");
   }, [open, entry, initialKind, categories, members, accounts, editing]);
@@ -72,7 +74,8 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
             note: note.trim(), start_month: date.slice(0, 7),
           });
         } else {
-          const payload = { amount: amt, category_id: catId, paid_by: who, account_id: accId, note: note.trim(), spent_on: date };
+          const cleanItems = items.map((s) => s.trim()).filter(Boolean);
+          const payload = { amount: amt, category_id: catId, paid_by: who, account_id: accId, items: cleanItems, note: note.trim(), spent_on: date };
           if (editing) await api.updateExpense(entry.id, payload);
           else await api.addExpense(payload);
         }
@@ -239,6 +242,21 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
               <>
                 <label className="fl">Paid from which account</label>
                 <AccountChips value={accId} onPick={setAccId} />
+              </>
+            )}
+
+            {!repeat && (
+              <>
+                <label className="fl">What's included (optional)</label>
+                {items.map((it, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    <input style={{ flex: 1 }} value={it} placeholder={`Item ${i + 1} — e.g. Milk`}
+                      onChange={(e) => setItems(items.map((x, j) => (j === i ? e.target.value : x)))} />
+                    <button type="button" className="x" onClick={() => setItems(items.filter((_, j) => j !== i))}>✕</button>
+                  </div>
+                ))}
+                <button type="button" className="btn ghost" style={{ marginTop: 8 }}
+                  onClick={() => setItems([...items, ""])}>+ Add item</button>
               </>
             )}
 
