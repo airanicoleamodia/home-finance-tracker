@@ -140,7 +140,7 @@ export default function Settings({ session, categories, members, onChange }) {
       const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
       const rows = [["type", "date", "amount", "category/source", "who", "account", "note", "items"]];
       (data.expenses || []).forEach((e) =>
-        rows.push(["expense", e.spent_on, e.amount, catOf(e.category_id).name, whoName(e.paid_by), accNameById(e.account_id), e.note, (Array.isArray(e.items) ? e.items.join("; ") : "")]));
+        rows.push(["expense", e.spent_on, e.amount, catOf(e.category_id).name, whoName(e.paid_by), accNameById(e.account_id), e.note, (Array.isArray(e.items) ? e.items.map((it) => typeof it === "string" ? it : `${it.name}:${it.amount}`).join("; ") : "")]));
       (data.income || []).forEach((e) =>
         rows.push(["income", e.received_on, e.amount, e.source, whoName(e.received_by), accNameById(e.account_id), e.note, ""]));
       (data.transfers || []).forEach((t) =>

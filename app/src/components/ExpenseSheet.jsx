@@ -35,7 +35,11 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
     setFromAcc(accounts[0]?.id ?? null);
     setToAcc(accounts[1]?.id ?? accounts[0]?.id ?? null);
     setFee("");
-    setItems(entry && k === "expense" && Array.isArray(entry.items) ? entry.items : []);
+    setItems(entry && k === "expense" && Array.isArray(entry.items)
+      ? entry.items.map((it) => (typeof it === "string"
+          ? { name: it, amount: "" }
+          : { name: it.name || "", amount: it.amount != null ? String(it.amount) : "" }))
+      : []);
     setDate(entry ? (k === "expense" ? entry.spent_on : entry.received_on) : todayISO());
     setNote(entry ? entry.note || "" : "");
   }, [open, entry, initialKind, categories, members, accounts, editing]);
@@ -74,7 +78,9 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
             note: note.trim(), start_month: date.slice(0, 7),
           });
         } else {
-          const cleanItems = items.map((s) => s.trim()).filter(Boolean);
+          const cleanItems = items
+            .map((it) => ({ name: it.name.trim(), amount: parseFloat(String(it.amount).replace(/[^0-9.]/g, "")) || 0 }))
+            .filter((it) => it.name);
           const payload = { amount: amt, category_id: catId, paid_by: who, account_id: accId, items: cleanItems, note: note.trim(), spent_on: date };
           if (editing) await api.updateExpense(entry.id, payload);
           else await api.addExpense(payload);
@@ -250,13 +256,24 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
                 <label className="fl">What's included (optional)</label>
                 {items.map((it, i) => (
                   <div key={i} style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                    <input style={{ flex: 1 }} value={it} placeholder={`Item ${i + 1} — e.g. Milk`}
-                      onChange={(e) => setItems(items.map((x, j) => (j === i ? e.target.value : x)))} />
+                    <input style={{ flex: 1, minWidth: 0 }} value={it.name} placeholder={`Item ${i + 1} — e.g. Milk`}
+                      onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+                    <input style={{ flex: "0 0 96px", width: 96, textAlign: "right" }} inputMode="decimal"
+                      value={it.amount} placeholder={CURRENCY + "0"}
+                      onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} />
                     <button type="button" className="x" onClick={() => setItems(items.filter((_, j) => j !== i))}>✕</button>
                   </div>
                 ))}
                 <button type="button" className="btn ghost" style={{ marginTop: 8 }}
-                  onClick={() => setItems([...items, ""])}>+ Add item</button>
+                  onClick={() => setItems([...items, { name: "", amount: "" }])}>+ Add item</button>
+                {items.length > 0 && (() => {
+                  const sub = items.reduce((s, it) => s + (parseFloat(String(it.amount).replace(/[^0-9.]/g, "")) || 0), 0);
+                  const total = parseFloat(String(amount).replace(/[^0-9.]/g, "")) || 0;
+                  const off = total && Math.abs(sub - total) > 0.005;
+                  return <div className="hint" style={{ marginTop: 6, color: off ? "var(--warn)" : undefined }}>
+                    Items add up to {CURRENCY}{sub.toLocaleString("en-US")}{off ? ` — expense total is ${CURRENCY}${total.toLocaleString("en-US")}` : ""}
+                  </div>;
+                })()}
               </>
             )}
 

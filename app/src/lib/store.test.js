@@ -90,13 +90,14 @@ describe("account balance integrity (local mode)", () => {
     expect(accounts.every((a) => a.balance === 0)).toBe(true);
   });
 
-  it("stores an optional item breakdown on an expense and updates it", async () => {
-    const e = await api.addExpense({ amount: 500, account_id: "a0", spent_on: "2026-06-02", items: ["Milk", "Eggs", "Bread"] });
+  it("stores an optional item breakdown (name + amount) on an expense and updates it", async () => {
+    const items = [{ name: "Milk", amount: 120 }, { name: "Eggs", amount: 80 }];
+    const e = await api.addExpense({ amount: 200, account_id: "a0", spent_on: "2026-06-02", items });
     let saved = (await api.getExpenses("2026-06")).find((x) => x.id === e.id);
-    expect(saved.items).toEqual(["Milk", "Eggs", "Bread"]);
-    await api.updateExpense(e.id, { amount: 500, account_id: "a0", spent_on: "2026-06-02", items: ["Milk"] });
+    expect(saved.items).toEqual(items);
+    await api.updateExpense(e.id, { amount: 120, account_id: "a0", spent_on: "2026-06-02", items: [{ name: "Milk", amount: 120 }] });
     saved = (await api.getExpenses("2026-06")).find((x) => x.id === e.id);
-    expect(saved.items).toEqual(["Milk"]);
+    expect(saved.items).toEqual([{ name: "Milk", amount: 120 }]);
   });
 
   it("defaults items to an empty array when omitted", async () => {
