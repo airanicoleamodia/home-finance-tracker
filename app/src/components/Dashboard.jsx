@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/store.js";
 import { fmt, ymKey, MONTHS, PALETTE, hexA } from "../lib/format.js";
+import AccountSheet from "./AccountSheet.jsx";
 
 export default function Dashboard({ cur, categories, refreshKey }) {
   const [data, setData] = useState(null);
+  const [acctSheet, setAcctSheet] = useState(null); // account whose ledger is open
   const monthKey = ymKey(cur);
 
   useEffect(() => {
@@ -64,14 +66,23 @@ export default function Dashboard({ cur, categories, refreshKey }) {
           </div>
         ) : (
           accounts.map((a) => (
-            <div className="mgr-row" key={a.id}>
+            <button className="mgr-row acct-row" key={a.id} onClick={() => setAcctSheet(a)} title="View transactions">
               <div className="ic" style={{ width: 32, height: 32, borderRadius: 9, fontSize: 16, background: "#f0f2f2", display: "flex", alignItems: "center", justifyContent: "center" }}>{a.icon}</div>
               <div className="nm">{a.name}</div>
               <strong className="acc-bal">{fmt(a.balance)}</strong>
-            </div>
+              <span className="chev">›</span>
+            </button>
           ))
         )}
       </div>
+
+      <AccountSheet
+        open={!!acctSheet}
+        account={acctSheet}
+        monthKey={monthKey}
+        categories={categories}
+        onClose={() => setAcctSheet(null)}
+      />
 
       <NetWorth accounts={accounts} loans={loans} />
 

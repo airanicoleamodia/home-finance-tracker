@@ -111,6 +111,9 @@ input:focus,select:focus{outline:none;border-color:var(--brand);background:#fff}
 .mgr-row .nm{flex:1;font-size:14.5px}
 .mgr-row .x{color:var(--muted);background:none;border:none;font-size:18px;cursor:pointer;padding:4px 8px}
 .acc-bal{color:var(--brand);font-weight:700;font-size:14.5px;white-space:nowrap}
+.mgr-row.acct-row{width:100%;background:none;border:none;border-bottom:1px solid var(--line);font:inherit;color:inherit;text-align:left;cursor:pointer}
+.mgr-row.acct-row .chev{color:var(--muted);font-size:20px;line-height:1;flex:0 0 auto}
+.mgr-row.acct-row:active{background:rgba(0,0,0,.03)}
 .mgr-row .acc-name{flex:1 1 auto;min-width:0;width:auto;font-size:14px;padding:8px 9px}
 .mgr-row .acc-bal-in{flex:0 0 96px;width:96px;min-width:0;text-align:right;font-size:14px;padding:8px 9px;color:var(--brand);font-weight:700}
 .add-inline{display:flex;gap:8px;margin-top:12px}
