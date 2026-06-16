@@ -186,6 +186,11 @@ const localApi = {
     return [...real, ...virtual]
       .sort((a, b) => b.spent_on.localeCompare(a.spent_on) || (b.created || 0) - (a.created || 0));
   },
+  // Expenses for a single day (YYYY-MM-DD), including recurring ones due that day.
+  async getExpensesByDay(dayISO) {
+    const all = await this.getExpenses(dayISO.slice(0, 7));
+    return all.filter((e) => e.spent_on === dayISO);
+  },
   async addExpense({ amount, category_id, paid_by, account_id, note, spent_on, items }) {
     const e = { id: uid(), amount: +amount, category_id, paid_by, account_id: account_id || null,
       items: Array.isArray(items) ? items : [], note: note || "", spent_on, created: Date.now() };
@@ -494,6 +499,11 @@ const cloudApi = {
     const eRows = (erules || []).map((r) => ({ ...r, start_month: (r.start_month || "").slice(0, 7) }));
     const virtual = expandRecurringExp(eRows, monthKey);
     return [...real, ...virtual].sort((a, b) => b.spent_on.localeCompare(a.spent_on));
+  },
+  // Expenses for a single day (YYYY-MM-DD), including recurring ones due that day.
+  async getExpensesByDay(dayISO) {
+    const all = await this.getExpenses(dayISO.slice(0, 7));
+    return all.filter((e) => e.spent_on === dayISO);
   },
   async addExpense({ amount, category_id, paid_by, account_id, note, spent_on, items }) {
     const hid = await householdId();

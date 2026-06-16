@@ -162,6 +162,32 @@ describe("account balance integrity (local mode)", () => {
   });
 });
 
+describe("getExpensesByDay (local mode)", () => {
+  beforeEach(async () => { await api.clearAll(); });
+
+  it("returns only the expenses spent on the given day", async () => {
+    await api.addExpense({ amount: 100, category_id: "c0", account_id: "a0", spent_on: "2026-06-16" });
+    await api.addExpense({ amount: 250, category_id: "c1", account_id: "a0", spent_on: "2026-06-16" });
+    await api.addExpense({ amount: 999, category_id: "c0", account_id: "a0", spent_on: "2026-06-15" });
+    const day = await api.getExpensesByDay("2026-06-16");
+    expect(day).toHaveLength(2);
+    expect(day.map((e) => e.amount).sort((a, b) => a - b)).toEqual([100, 250]);
+  });
+
+  it("includes a recurring expense due on that day", async () => {
+    await api.addRecurringExpense({ amount: 500, category_id: "c2", day_of_month: 16, start_month: "2026-01" });
+    const onDue = await api.getExpensesByDay("2026-06-16");
+    expect(onDue.some((e) => e.amount === 500 && e.recurring)).toBe(true);
+    // A different day in the same month should not include it.
+    const offDue = await api.getExpensesByDay("2026-06-17");
+    expect(offDue.some((e) => e.recurring)).toBe(false);
+  });
+
+  it("returns an empty array for a day with no expenses", async () => {
+    expect(await api.getExpensesByDay("2026-06-16")).toEqual([]);
+  });
+});
+
 describe("transfers (local mode)", () => {
   beforeEach(async () => {
     await api.clearAll();

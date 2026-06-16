@@ -32,6 +32,17 @@ export const ymKey = (d) =>
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);
 
+// Shift a YYYY-MM-DD day string by `delta` days (local time, DST-safe).
+export const shiftISO = (dayISO, delta) => {
+  const d = new Date(dayISO + "T00:00:00");
+  d.setDate(d.getDate() + delta);
+  return (
+    d.getFullYear() + "-" +
+    String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0")
+  );
+};
+
 export const PALETTE = [
   "#0f766e", "#2563eb", "#d97706", "#dc2626", "#7c3aed",
   "#059669", "#0891b2", "#db2777", "#9333ea", "#65a30d",
