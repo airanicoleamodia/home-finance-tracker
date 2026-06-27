@@ -240,6 +240,54 @@ describe("getExpensesByDay (local mode)", () => {
   });
 });
 
+describe("getDailyTotals (local mode)", () => {
+  beforeEach(async () => { await api.clearAll(); });
+
+  it("returns n day buckets ending at endISO, oldest to newest", async () => {
+    const days = await api.getDailyTotals("2026-06-27", 7);
+    expect(days).toHaveLength(7);
+    expect(days[0].day).toBe("2026-06-21");
+    expect(days[6].day).toBe("2026-06-27");
+    expect(days.every((d) => d.expense === 0)).toBe(true);
+  });
+
+  it("buckets each day's spending and leaves other days at 0", async () => {
+    await api.addExpense({ amount: 100, account_id: "a0", spent_on: "2026-06-22" });
+    await api.addExpense({ amount: 250, account_id: "a0", spent_on: "2026-06-25" });
+    await api.addExpense({ amount: 400, account_id: "a0", spent_on: "2026-06-27" });
+    const days = await api.getDailyTotals("2026-06-27", 7);
+    const byDay = Object.fromEntries(days.map((d) => [d.day, d.expense]));
+    expect(byDay["2026-06-22"]).toBe(100);
+    expect(byDay["2026-06-25"]).toBe(250);
+    expect(byDay["2026-06-27"]).toBe(400);
+    expect(byDay["2026-06-23"]).toBe(0);
+  });
+
+  it("sums multiple expenses on the same day", async () => {
+    await api.addExpense({ amount: 60, account_id: "a0", spent_on: "2026-06-26" });
+    await api.addExpense({ amount: 90, account_id: "a0", spent_on: "2026-06-26" });
+    const days = await api.getDailyTotals("2026-06-27", 7);
+    expect(days.find((d) => d.day === "2026-06-26").expense).toBe(150);
+  });
+
+  it("handles a window that spans a month boundary", async () => {
+    await api.addExpense({ amount: 100, account_id: "a0", spent_on: "2026-06-29" });
+    await api.addExpense({ amount: 300, account_id: "a0", spent_on: "2026-07-02" });
+    const days = await api.getDailyTotals("2026-07-03", 7); // 2026-06-27 .. 2026-07-03
+    expect(days[0].day).toBe("2026-06-27");
+    expect(days[6].day).toBe("2026-07-03");
+    expect(days.find((d) => d.day === "2026-06-29").expense).toBe(100);
+    expect(days.find((d) => d.day === "2026-07-02").expense).toBe(300);
+  });
+
+  it("includes a recurring expense due within the window", async () => {
+    await api.addRecurringExpense({ amount: 500, category_id: "c2", day_of_month: 25, start_month: "2026-01" });
+    const days = await api.getDailyTotals("2026-06-27", 7);
+    expect(days.find((d) => d.day === "2026-06-25").expense).toBe(500);
+    expect(days.find((d) => d.day === "2026-06-24").expense).toBe(0);
+  });
+});
+
 describe("transfers (local mode)", () => {
   beforeEach(async () => {
     await api.clearAll();

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, weeklyExpenseTotals } from "../lib/store.js";
-import { fmt, ymKey, MONTHS, PALETTE, hexA } from "../lib/format.js";
+import { fmt, ymKey, MONTHS, PALETTE, hexA, todayISO, shiftISO } from "../lib/format.js";
 import AccountSheet from "./AccountSheet.jsx";
 
 export default function Dashboard({ cur, categories, refreshKey }) {
@@ -101,6 +101,10 @@ export default function Dashboard({ cur, categories, refreshKey }) {
           <WeeklyBars expenses={expenses} monthKey={monthKey} />
         </>
       )}
+
+      {/* Daily spending — rolling 7-day window, independent of the selected month */}
+      <div className="section-h">Daily spending</div>
+      <DailyBars refreshKey={refreshKey} />
 
       {/* Trends */}
       <div className="section-h">6-month trend</div>
@@ -227,6 +231,71 @@ function SpendByAccount({ expenses, accounts }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+// Rolling 7-day spending chart. Defaults to the week ending today and lets you
+// page back a week at a time (forward is capped at today).
+function DailyBars({ refreshKey }) {
+  const [endDay, setEndDay] = useState(todayISO());
+  const [days, setDays] = useState(null);
+
+  useEffect(() => {
+    let on = true;
+    api.getDailyTotals(endDay, 7)
+      .then((d) => on && setDays(d))
+      .catch(() => on && setDays([]));
+    return () => { on = false; };
+  }, [endDay, refreshKey]);
+
+  const atToday = endDay >= todayISO();
+  const dayLabel = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`; };
+  const startDay = shiftISO(endDay, -6);
+
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <div className="month" style={{ marginTop: 0 }}>
+        <button onClick={() => setEndDay((x) => shiftISO(x, -7))} aria-label="Previous 7 days">‹</button>
+        <div className="label">{dayLabel(startDay)} – {dayLabel(endDay)}</div>
+        <button onClick={() => setEndDay((x) => shiftISO(x, 7))} disabled={atToday} aria-label="Next 7 days"
+          style={atToday ? { opacity: 0.4, cursor: "default" } : undefined}>›</button>
+      </div>
+
+      {days === null ? (
+        <div className="center" style={{ padding: "20px 0" }}>Loading…</div>
+      ) : (() => {
+        const total = days.reduce((s, d) => s + d.expense, 0);
+        if (total <= 0) {
+          return <div className="hint" style={{ padding: "10px 0 2px" }}>No spending in these 7 days.</div>;
+        }
+        const max = Math.max(1, ...days.map((d) => d.expense));
+        const W = 320, H = 140, pad = 22, bw = (W - pad * 2) / days.length;
+        return (
+          <>
+            <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="150" role="img" aria-label="Daily spending">
+              {days.map((d, i) => {
+                const x = pad + i * bw;
+                const h = (d.expense / max) * (H - 42);
+                const bar = bw * 0.5;
+                return (
+                  <g key={i}>
+                    <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="#0f766e" />
+                    <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="#6b7a77">
+                      {WEEKDAYS[new Date(d.day + "T00:00:00").getDay()]}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+            <div className="legend-inline">
+              <span><i style={{ background: "#0f766e" }} /> Spent · {fmt(total)}</span>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

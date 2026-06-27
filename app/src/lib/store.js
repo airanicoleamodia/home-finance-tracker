@@ -5,7 +5,7 @@
 // Both expose the SAME async API so the UI never branches.
 // =====================================================================
 import { supabase, hasSupabase } from "./supabase.js";
-import { ymKey, PALETTE } from "./format.js";
+import { ymKey, PALETTE, shiftISO } from "./format.js";
 
 const DEFAULT_CATS = [
   { name: "Groceries", icon: "🛒", color: "#0f766e", sort_order: 10, is_default: true },
@@ -383,6 +383,23 @@ const localApi = {
       out.push({ month: mk, income: inc, expense: exp, net: inc - exp });
     }
     return out;
+  },
+
+  // ----- daily spending: total spent per day for the n days ending at endISO -----
+  async getDailyTotals(endISO, n) {
+    const days = [];
+    for (let i = n - 1; i >= 0; i--) days.push(shiftISO(endISO, -i));
+    // Expand recurring expenses once per spanned month, bucketed by their due day.
+    const recurByDay = {};
+    [...new Set(days.map((d) => d.slice(0, 7)))].forEach((mk) => {
+      expandRecurringExp(L.recurring_expenses, mk).forEach((e) => {
+        recurByDay[e.spent_on] = (recurByDay[e.spent_on] || 0) + Number(e.amount);
+      });
+    });
+    return days.map((day) => {
+      const real = L.expenses.filter((e) => e.spent_on === day).reduce((s, e) => s + Number(e.amount), 0);
+      return { day, expense: real + (recurByDay[day] || 0) };
+    });
   },
 
   async updateHouseholdCurrency(code) { L.household.currency = code; lsave(); return L.household; },
@@ -764,6 +781,28 @@ const cloudApi = {
       out.push({ month: mk, income: ti, expense: e, net: ti - e });
     }
     return out;
+  },
+
+  // ----- daily spending: total spent per day for the n days ending at endISO -----
+  async getDailyTotals(endISO, n) {
+    const startISO = shiftISO(endISO, -(n - 1));
+    const days = [];
+    for (let i = n - 1; i >= 0; i--) days.push(shiftISO(endISO, -i));
+    const { data: exp } = await supabase.from("expenses").select("amount,spent_on")
+      .gte("spent_on", startISO).lte("spent_on", endISO);
+    // Expand recurring expenses per spanned month, keep only those inside the window.
+    const expRules = await this.getRecurringExpenses();
+    const recurByDay = {};
+    [...new Set(days.map((d) => d.slice(0, 7)))].forEach((mk) => {
+      expandRecurringExp(expRules, mk).forEach((e) => {
+        if (e.spent_on >= startISO && e.spent_on <= endISO)
+          recurByDay[e.spent_on] = (recurByDay[e.spent_on] || 0) + Number(e.amount);
+      });
+    });
+    return days.map((day) => {
+      const real = (exp || []).filter((x) => x.spent_on === day).reduce((s, x) => s + Number(x.amount), 0);
+      return { day, expense: real + (recurByDay[day] || 0) };
+    });
   },
 
   async updateHouseholdCurrency(code) {
