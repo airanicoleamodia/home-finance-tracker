@@ -116,6 +116,26 @@ export function expandRecurringExp(rules, monthKey) {
       };
     });
 }
+// Group a month's expenses into week-of-month buckets (W1 = days 1–7, W2 = 8–14, …).
+// Returns one entry per week the month actually has (4 or 5):
+//   { week, label, start, end, total }   — spending only; income is ignored.
+export function weeklyExpenseTotals(expenses, monthKey) {
+  const [y, m] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate(); // 0th day of next month = last day of this one
+  const weekCount = Math.ceil(daysInMonth / 7);    // 4 for a 28-day month, otherwise 5
+  const weeks = Array.from({ length: weekCount }, (_, i) => {
+    const start = i * 7 + 1;
+    const end = Math.min(start + 6, daysInMonth);
+    return { week: i + 1, label: `${start}–${end}`, start, end, total: 0 };
+  });
+  (expenses || []).forEach((e) => {
+    if (!e.spent_on || e.spent_on.slice(0, 7) !== monthKey) return;
+    const day = Number(e.spent_on.slice(8, 10));
+    const idx = Math.ceil(day / 7) - 1;
+    if (weeks[idx]) weeks[idx].total += Number(e.amount) || 0;
+  });
+  return weeks;
+}
 function addMonthKey(monthKey, delta) {
   const [y, m] = monthKey.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);

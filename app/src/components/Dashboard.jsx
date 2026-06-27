@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/store.js";
+import { api, weeklyExpenseTotals } from "../lib/store.js";
 import { fmt, ymKey, MONTHS, PALETTE, hexA } from "../lib/format.js";
 import AccountSheet from "./AccountSheet.jsx";
 
@@ -96,6 +96,9 @@ export default function Dashboard({ cur, categories, refreshKey }) {
 
           <div className="section-h">Spending by account</div>
           <SpendByAccount expenses={expenses} accounts={accounts} />
+
+          <div className="section-h">Weekly spending</div>
+          <WeeklyBars expenses={expenses} monthKey={monthKey} />
         </>
       )}
 
@@ -224,6 +227,40 @@ function SpendByAccount({ expenses, accounts }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function WeeklyBars({ expenses, monthKey }) {
+  const weeks = weeklyExpenseTotals(expenses, monthKey);
+  const total = weeks.reduce((s, w) => s + w.total, 0);
+  if (total <= 0) {
+    return (
+      <div className="card" style={{ padding: 14 }}>
+        <div className="hint" style={{ padding: "6px 0" }}>No expenses to chart this month.</div>
+      </div>
+    );
+  }
+  const max = Math.max(1, ...weeks.map((w) => w.total));
+  const W = 320, H = 140, pad = 22, bw = (W - pad * 2) / weeks.length;
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="150" role="img" aria-label="Weekly spending">
+        {weeks.map((w, i) => {
+          const x = pad + i * bw;
+          const h = (w.total / max) * (H - 42);
+          const bar = bw * 0.5;
+          return (
+            <g key={i}>
+              <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="#0f766e" />
+              <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="#6b7a77">{w.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="legend-inline">
+        <span><i style={{ background: "#0f766e" }} /> Spent · {fmt(total)}</span>
+      </div>
     </div>
   );
 }

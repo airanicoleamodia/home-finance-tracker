@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { api, MODE, expandRecurring, expandRecurringExp } from "./store.js";
+import { api, MODE, expandRecurring, expandRecurringExp, weeklyExpenseTotals } from "./store.js";
 
 // These tests exercise the LOCAL-MODE data layer. Supabase env vars are absent
 // in the test environment, so MODE === "local" and `api` is the localApi.
@@ -42,6 +42,58 @@ describe("expandRecurring (income)", () => {
     expect(expandRecurring(rules, "2026-02")[0].received_on).toBe("2026-02-28");
     // Jan 2026 keeps 31.
     expect(expandRecurring(rules, "2026-01")[0].received_on).toBe("2026-01-31");
+  });
+});
+
+describe("weeklyExpenseTotals", () => {
+  it("buckets expenses into the right week of the month (W1 = days 1–7, …)", () => {
+    const expenses = [
+      { spent_on: "2026-06-03", amount: 100 }, // W1
+      { spent_on: "2026-06-10", amount: 200 }, // W2
+      { spent_on: "2026-06-17", amount: 300 }, // W3
+      { spent_on: "2026-06-24", amount: 400 }, // W4
+    ];
+    const weeks = weeklyExpenseTotals(expenses, "2026-06");
+    expect(weeks.map((w) => w.total)).toEqual([100, 200, 300, 400, 0]); // June has 30 days -> 5 buckets
+    expect(weeks[0].label).toBe("1–7");
+  });
+
+  it("sums multiple expenses landing in the same week", () => {
+    const expenses = [
+      { spent_on: "2026-06-08", amount: 50 },
+      { spent_on: "2026-06-14", amount: 70 },
+    ];
+    const weeks = weeklyExpenseTotals(expenses, "2026-06");
+    expect(weeks[1].total).toBe(120); // both in W2 (8–14)
+  });
+
+  it("gives a 31-day month a 5th week (days 29–31)", () => {
+    const expenses = [{ spent_on: "2026-07-30", amount: 500 }];
+    const weeks = weeklyExpenseTotals(expenses, "2026-07");
+    expect(weeks).toHaveLength(5);
+    expect(weeks[4].label).toBe("29–31");
+    expect(weeks[4].total).toBe(500);
+  });
+
+  it("yields exactly 4 buckets for a 28-day February", () => {
+    const weeks = weeklyExpenseTotals([], "2026-02"); // Feb 2026 has 28 days
+    expect(weeks).toHaveLength(4);
+    expect(weeks[3].label).toBe("22–28");
+  });
+
+  it("returns all-zero buckets for a month with no expenses", () => {
+    const weeks = weeklyExpenseTotals([], "2026-06");
+    expect(weeks).toHaveLength(5);
+    expect(weeks.every((w) => w.total === 0)).toBe(true);
+  });
+
+  it("ignores expenses outside the requested month", () => {
+    const expenses = [
+      { spent_on: "2026-05-31", amount: 999 },
+      { spent_on: "2026-06-02", amount: 100 },
+    ];
+    const weeks = weeklyExpenseTotals(expenses, "2026-06");
+    expect(weeks.reduce((s, w) => s + w.total, 0)).toBe(100);
   });
 });
 
