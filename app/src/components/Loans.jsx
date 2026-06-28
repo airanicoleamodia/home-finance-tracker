@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/store.js";
 import { fmt } from "../lib/format.js";
+import { useToast } from "../ui/ToastProvider.jsx";
+import { useConfirm } from "../ui/ConfirmProvider.jsx";
 import LoanSheet from "./LoanSheet.jsx";
 
 export default function Loans({ accounts = [], refreshKey, onChange }) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [loans, setLoans] = useState(null);
   const [sheet, setSheet] = useState({ open: false, mode: "add", loan: null });
   const [expanded, setExpanded] = useState(null);     // loan id whose repayments are shown
@@ -25,14 +29,14 @@ export default function Loans({ accounts = [], refreshKey, onChange }) {
   }
 
   async function delLoan(id) {
-    if (!confirm("Delete this loan and all its repayments? Linked account balances will be reversed.")) return;
-    try { await api.deleteLoan(id); setExpanded(null); setTick((t) => t + 1); onChange && onChange(); }
-    catch (e) { alert(e.message); }
+    if (!(await confirm({ title: "Delete this loan?", body: "This removes the loan and all its repayments. Linked account balances will be reversed.", danger: true }))) return;
+    try { await api.deleteLoan(id); setExpanded(null); setTick((t) => t + 1); onChange && onChange(); toast.success("Loan deleted"); }
+    catch (e) { toast.error(e.message || "Could not delete."); }
   }
   async function delRepayment(rid) {
-    if (!confirm("Remove this repayment?")) return;
-    try { await api.deleteRepayment(rid); setReps(await api.getLoanRepayments(expanded)); setTick((t) => t + 1); onChange && onChange(); }
-    catch (e) { alert(e.message); }
+    if (!(await confirm({ title: "Remove this repayment?", danger: true }))) return;
+    try { await api.deleteRepayment(rid); setReps(await api.getLoanRepayments(expanded)); setTick((t) => t + 1); onChange && onChange(); toast.success("Repayment removed"); }
+    catch (e) { toast.error(e.message || "Could not remove."); }
   }
 
   function onSaved() {

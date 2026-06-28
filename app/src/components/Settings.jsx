@@ -1,10 +1,14 @@
 import { useState, useEffect } from "react";
 import { api, MODE } from "../lib/store.js";
 import { CURRENCY, CURRENCY_CODE, CURRENCIES, CURRENCY_SYMBOLS, setCurrency, fmt, hexA } from "../lib/format.js";
+import { useToast } from "../ui/ToastProvider.jsx";
+import { useConfirm } from "../ui/ConfirmProvider.jsx";
 
 const ACCOUNT_ICONS = ["💵", "🏦", "📱", "🐷", "💳", "💰", "📦"];
 
 export default function Settings({ session, categories, members, onChange }) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [newPerson, setNewPerson] = useState("");
   const [newCat, setNewCat] = useState("");
   const [busy, setBusy] = useState(false);
@@ -24,24 +28,24 @@ export default function Settings({ session, categories, members, onChange }) {
   useEffect(() => { loadAccounts(); }, []);
 
   async function addAccount() {
-    if (!aName.trim()) { alert("Name the account (e.g. BPI, GCash, Cash)."); return; }
+    if (!aName.trim()) { toast.error("Name the account (e.g. BPI, GCash, Cash)."); return; }
     const bal = parseFloat(String(aBal).replace(/[^0-9.]/g, "")) || 0;
     setBusy(true);
     try {
       await api.addAccount({ name: aName.trim(), icon: aIcon, balance: bal });
       setAName(""); setABal(""); setAIcon("🏦");
-      await loadAccounts(); onChange();
-    } catch (e) { alert(e.message); }
+      await loadAccounts(); onChange(); toast.success("Account added");
+    } catch (e) { toast.error(e.message || "Could not add."); }
     finally { setBusy(false); }
   }
   async function saveAccount(id, patch) {
     try { await api.updateAccount(id, patch); await loadAccounts(); onChange(); }
-    catch (e) { alert(e.message); }
+    catch (e) { toast.error(e.message || "Could not save."); }
   }
   async function delAccount(id) {
-    if (!confirm("Remove this account?")) return;
-    try { await api.deleteAccount(id); await loadAccounts(); onChange(); }
-    catch (e) { alert(e.message); }
+    if (!(await confirm({ title: "Remove this account?", danger: true }))) return;
+    try { await api.deleteAccount(id); await loadAccounts(); onChange(); toast.success("Account removed"); }
+    catch (e) { toast.error(e.message || "Could not remove."); }
   }
   const accTotal = accounts.reduce((s, a) => s + Number(a.balance || 0), 0);
 
@@ -61,16 +65,16 @@ export default function Settings({ session, categories, members, onChange }) {
   async function addRec() {
     const amt = parseFloat(String(rAmount).replace(/[^0-9.]/g, ""));
     const day = Math.min(31, Math.max(1, parseInt(rDay, 10) || 1));
-    if (!amt || amt <= 0) { alert("Enter an amount."); return; }
+    if (!amt || amt <= 0) { toast.error("Enter an amount."); return; }
     setBusy(true);
     try {
       await api.addRecurringIncome({ amount: amt, source: rSource.trim() || "Salary", day_of_month: day, received_by: rWho });
-      setRAmount(""); await loadRecs(); onChange();
-    } catch (e) { alert(e.message); }
+      setRAmount(""); await loadRecs(); onChange(); toast.success("Recurring income added");
+    } catch (e) { toast.error(e.message || "Could not add."); }
     finally { setBusy(false); }
   }
   async function delRec(id) {
-    try { await api.deleteRecurringIncome(id); await loadRecs(); onChange(); } catch (e) { alert(e.message); }
+    try { await api.deleteRecurringIncome(id); await loadRecs(); onChange(); toast.success("Removed"); } catch (e) { toast.error(e.message || "Could not remove."); }
   }
 
   // recurring expenses
@@ -80,7 +84,7 @@ export default function Settings({ session, categories, members, onChange }) {
   }
   useEffect(() => { loadRecExp(); }, []);
   async function delRecExp(id) {
-    try { await api.deleteRecurringExpense(id); await loadRecExp(); onChange(); } catch (e) { alert(e.message); }
+    try { await api.deleteRecurringExpense(id); await loadRecExp(); onChange(); toast.success("Removed"); } catch (e) { toast.error(e.message || "Could not remove."); }
   }
   const catOf = (id) => categories.find((c) => c.id === id) || { name: "Uncategorized", icon: "🏷️", color: "#6b7280" };
   const whoName = (id) => members.find((m) => m.id === id)?.display_name || "—";
@@ -91,7 +95,7 @@ export default function Settings({ session, categories, members, onChange }) {
 
   async function changeCurrency(code) {
     setCurCode(code); setCurrency(code);
-    try { await api.updateHouseholdCurrency(code); onChange(); } catch (e) { alert(e.message); }
+    try { await api.updateHouseholdCurrency(code); onChange(); } catch (e) { toast.error(e.message || "Could not update currency."); }
   }
   function toggleDark() {
     const next = !dark; setDark(next);
@@ -102,23 +106,23 @@ export default function Settings({ session, categories, members, onChange }) {
   async function addPerson() {
     if (!newPerson.trim()) return;
     setBusy(true);
-    try { await api.addMember(newPerson.trim()); setNewPerson(""); onChange(); }
-    catch (e) { alert(e.message); }
+    try { await api.addMember(newPerson.trim()); setNewPerson(""); onChange(); toast.success("Person added"); }
+    catch (e) { toast.error(e.message || "Could not add."); }
     finally { setBusy(false); }
   }
   async function removePerson(id) {
-    try { await api.removeMember(id); onChange(); } catch (e) { alert(e.message); }
+    try { await api.removeMember(id); onChange(); toast.success("Person removed"); } catch (e) { toast.error(e.message || "Could not remove."); }
   }
   async function addCat() {
     if (!newCat.trim()) return;
     setBusy(true);
-    try { await api.addCategory(newCat.trim()); setNewCat(""); onChange(); }
-    catch (e) { alert(e.message); }
+    try { await api.addCategory(newCat.trim()); setNewCat(""); onChange(); toast.success("Category added"); }
+    catch (e) { toast.error(e.message || "Could not add."); }
     finally { setBusy(false); }
   }
   async function delCat(id) {
-    if (!confirm("Delete this category? Existing expenses will become Uncategorized.")) return;
-    try { await api.deleteCategory(id); onChange(); } catch (e) { alert(e.message); }
+    if (!(await confirm({ title: "Delete this category?", body: "Existing expenses will become Uncategorized.", danger: true }))) return;
+    try { await api.deleteCategory(id); onChange(); toast.success("Category deleted"); } catch (e) { toast.error(e.message || "Could not delete."); }
   }
 
   function download(name, text, type) {
@@ -132,7 +136,7 @@ export default function Settings({ session, categories, members, onChange }) {
     try {
       const data = await api.exportData();
       download("home-finance-backup.json", JSON.stringify(data, null, 2), "application/json");
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast.error(e.message || "Could not export."); }
   }
   async function exportCSV() {
     try {
@@ -147,38 +151,48 @@ export default function Settings({ session, categories, members, onChange }) {
         rows.push(["transfer", t.moved_on, t.amount, "", "", `${accNameById(t.from_account)} -> ${accNameById(t.to_account)}`, t.note, ""]));
       const csv = rows.map((r) => r.map(esc).join(",")).join("\n");
       download("home-finance-export.csv", csv, "text/csv");
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast.error(e.message || "Could not export."); }
   }
   const accNameById = (id) => accounts.find((a) => a.id === id)?.name || "";
   function reloadLists() { loadAccounts(); loadRecs(); loadRecExp(); }
 
   async function resetData() {
-    if (prompt("This deletes ALL transactions (expenses, income, transfers, recurring rules, budgets) and resets every account balance to 0.\n\nYour accounts, categories and people are kept.\n\nType RESET to confirm.") !== "RESET") return;
+    const ok = await confirm({
+      title: "Reset all data",
+      body: "This deletes ALL transactions (expenses, income, transfers, recurring rules, budgets) and resets every account balance to 0.\n\nYour accounts, categories and people are kept.",
+      danger: true, requireText: "RESET", confirmText: "Reset",
+    });
+    if (!ok) return;
     setBusy(true);
-    try { await api.resetData(); reloadLists(); onChange(); alert("Done — your household is starting fresh."); }
-    catch (e) { alert(e.message); }
+    try { await api.resetData(); reloadLists(); onChange(); toast.success("Done — your household is starting fresh."); }
+    catch (e) { toast.error(e.message || "Could not reset."); }
     finally { setBusy(false); }
   }
   async function factoryReset() {
-    if (prompt("This ERASES EVERYTHING — all transactions, your custom accounts and categories — and restores the default setup.\n\nType ERASE to confirm.") !== "ERASE") return;
+    const ok = await confirm({
+      title: "Factory reset",
+      body: "This ERASES EVERYTHING — all transactions, your custom accounts and categories — and restores the default setup.",
+      danger: true, requireText: "ERASE", confirmText: "Erase everything",
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await (api.factoryReset ? api.factoryReset() : api.clearAll());
-      reloadLists(); onChange(); alert("Everything erased. The app is back to a clean default state.");
-    } catch (e) { alert(e.message); }
+      reloadLists(); onChange(); toast.success("Everything erased. The app is back to a clean default state.");
+    } catch (e) { toast.error(e.message || "Could not reset."); }
     finally { setBusy(false); }
   }
   async function logOut() {
-    if (!confirm("Log out of your household account?")) return;
+    if (!(await confirm({ title: "Log out of your household account?", confirmText: "Log out" }))) return;
     await api.signOut(); location.reload();
   }
 
   async function copyInvite() {
     const id = session?.household?.id;
-    if (!id) { alert("No household id available."); return; }
+    if (!id) { toast.error("No household id available."); return; }
     const link = `${window.location.origin}?invite=${id}`;
-    try { await navigator.clipboard.writeText(link); alert("Invite link copied!\n\n" + link); }
-    catch { prompt("Copy this invite link:", link); }
+    try { await navigator.clipboard.writeText(link); toast.success("Invite link copied to clipboard"); }
+    catch { await confirm({ title: "Copy this invite link", body: link, confirmText: "Done", cancelText: "Close" }); }
   }
 
   return (

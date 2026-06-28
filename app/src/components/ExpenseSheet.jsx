@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/store.js";
 import { CURRENCY, todayISO } from "../lib/format.js";
+import { useToast } from "../ui/ToastProvider.jsx";
+import { useConfirm } from "../ui/ConfirmProvider.jsx";
 
 // Handles EXPENSE and INCOME entries (add + edit), recurring rules, and TRANSFERS.
 export default function ExpenseSheet({ open, kind: initialKind, entry, categories, members, accounts = [], onClose, onSaved }) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const editing = Boolean(entry);
   const [kind, setKind] = useState("expense"); // "expense" | "income" | "transfer"
   const [amount, setAmount] = useState("");
@@ -49,8 +53,8 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
     if (!amt || amt <= 0) { setErr(true); return; }
 
     if (kind === "transfer") {
-      if (!fromAcc || !toAcc) { alert("Pick both a 'from' and a 'to' account."); return; }
-      if (fromAcc === toAcc) { alert("Choose two different accounts."); return; }
+      if (!fromAcc || !toAcc) { toast.error("Pick both a 'from' and a 'to' account."); return; }
+      if (fromAcc === toAcc) { toast.error("Choose two different accounts."); return; }
       const feeAmt = parseFloat(String(fee).replace(/[^0-9.]/g, "")) || 0;
       // Fee is logged under a "Transfer Fee" category if one exists, else "Other".
       const feeCat = categories.find((c) => (c.name || "").toLowerCase() === "transfer fee")
@@ -62,8 +66,9 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
           amount: amt, from_account: fromAcc, to_account: toAcc, note: note.trim(), moved_on: date,
           fee: feeAmt, fee_category_id: feeAmt > 0 ? (feeCat?.id ?? null) : null,
         });
+        toast.success("Transfer saved");
         onSaved(date);
-      } catch (e) { alert(e.message || "Could not save."); }
+      } catch (e) { toast.error(e.message || "Could not save."); }
       finally { setBusy(false); }
       return;
     }
@@ -99,20 +104,22 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
           else await api.addIncome(payload);
         }
       }
+      toast.success(editing ? "Changes saved" : (!editing && repeat) ? "Recurring rule added" : "Saved");
       onSaved(editing ? null : date);
     } catch (e) {
-      alert(e.message || "Could not save.");
+      toast.error(e.message || "Could not save.");
     } finally { setBusy(false); }
   }
 
   async function remove() {
-    if (!confirm("Delete this entry?")) return;
+    if (!(await confirm({ title: "Delete this entry?", danger: true }))) return;
     setBusy(true);
     try {
       if (kind === "expense") await api.deleteExpense(entry.id);
       else await api.deleteIncome(entry.id);
+      toast.success("Deleted");
       onSaved(null);
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast.error(e.message || "Could not delete."); }
     finally { setBusy(false); }
   }
 

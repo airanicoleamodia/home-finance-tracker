@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/store.js";
 import { CURRENCY, todayISO } from "../lib/format.js";
+import { useToast } from "../ui/ToastProvider.jsx";
 
 // Add a loan (lent out / borrowed) or record a repayment against an existing loan.
 export default function LoanSheet({ open, mode, loan, accounts = [], onClose, onSaved }) {
+  const toast = useToast();
   const repaying = mode === "repay";
   const editing = mode === "edit";
   const [isLent, setIsLent] = useState(true);
@@ -43,7 +45,7 @@ export default function LoanSheet({ open, mode, loan, accounts = [], onClose, on
   async function save() {
     const amt = parseFloat(String(amount).replace(/[^0-9.]/g, ""));
     if (!amt || amt <= 0) { setErr(true); return; }
-    if (!repaying && !counterparty.trim()) { alert("Who is the loan with? (e.g. Tito Boy, Home Credit)"); return; }
+    if (!repaying && !counterparty.trim()) { toast.error("Who is the loan with? (e.g. Tito Boy, Home Credit)"); return; }
     setBusy(true);
     try {
       if (repaying) {
@@ -59,8 +61,9 @@ export default function LoanSheet({ open, mode, loan, accounts = [], onClose, on
           account_id: accId, note: note.trim(), started_on: date, due_on: dueOn || null,
         });
       }
+      toast.success(repaying ? "Repayment recorded" : editing ? "Loan updated" : "Loan added");
       onSaved(date);
-    } catch (e) { alert(e.message || "Could not save."); }
+    } catch (e) { toast.error(e.message || "Could not save."); }
     finally { setBusy(false); }
   }
 
