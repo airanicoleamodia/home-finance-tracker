@@ -197,183 +197,202 @@ export default function Settings({ session, categories, members, onChange }) {
 
   return (
     <>
-      <div className="section-h">Recurring income <span className="pill">{recs.length}</span></div>
-      <div className="card" style={{ padding: "6px 16px 16px" }}>
-        {recs.length === 0 && <div className="hint" style={{ padding: "10px 0" }}>No recurring income yet. Add your salary below so it appears automatically every month.</div>}
-        {recs.map((r) => (
-          <div className="mgr-row" key={r.id}>
-            <div className="ic ic-sm" style={{ background: hexA("#0f766e", 0.14) }}>💰</div>
-            <div className="nm">{r.source} · {fmt(r.amount)}<div className="hint" style={{ margin: 0 }}>day {r.day_of_month} · {whoName(r.received_by)}</div></div>
-            <button className="x" onClick={() => delRec(r.id)}>✕</button>
+      <Section title="Accounts" badge={accounts.length > 0 ? fmt(accTotal) : null} defaultOpen>
+        <div className="card" style={{ padding: "6px 16px 16px" }}>
+          {accounts.length === 0 && (
+            <div className="hint" style={{ padding: "10px 0" }}>
+              Add your banks, e-wallets and cash so you can see where your money sits. You keep each balance up to date here.
+            </div>
+          )}
+          {accounts.map((a) => (
+            <AccountRow key={a.id} a={a} onSave={saveAccount} onDelete={delAccount} />
+          ))}
+          <label className="fl">Add an account</label>
+          <div className="chips">
+            {ACCOUNT_ICONS.map((ic) => (
+              <button type="button" key={ic}
+                className={"chip" + (ic === aIcon ? " sel" : "")}
+                onClick={() => setAIcon(ic)}>{ic}</button>
+            ))}
           </div>
-        ))}
-        <label className="fl">Add salary / recurring income</label>
-        <div className="rec-grid">
-          <input inputMode="decimal" placeholder={CURRENCY + " amount"} value={rAmount} onChange={(e) => setRAmount(e.target.value)} />
-          <input placeholder="Source (e.g. Salary)" value={rSource} onChange={(e) => setRSource(e.target.value)} />
-          <input inputMode="numeric" placeholder="Day (1-31)" value={rDay} onChange={(e) => setRDay(e.target.value)} />
-          <select value={rWho ?? ""} onChange={(e) => setRWho(e.target.value)}>
-            {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
-          </select>
+          <div className="rec-grid" style={{ marginTop: 10 }}>
+            <input value={aName} maxLength={28} placeholder="Name (e.g. BPI, GCash)" onChange={(e) => setAName(e.target.value)} />
+            <input inputMode="decimal" placeholder={CURRENCY + " balance"} value={aBal} onChange={(e) => setABal(e.target.value)} />
+          </div>
+          <button className="btn" onClick={addAccount} disabled={busy} style={{ marginTop: 12 }}>Add account</button>
+          <div className="hint">These balances are manual — update them whenever money moves.</div>
         </div>
-        <button className="btn" onClick={addRec} disabled={busy} style={{ marginTop: 12 }}>Add recurring income</button>
-        <div className="hint">e.g. {CURRENCY}30,000 Salary on day 15 — auto-counted every month.</div>
-      </div>
+      </Section>
 
-      <div className="section-h">Recurring expenses <span className="pill">{recExp.length}</span></div>
-      <div className="card" style={{ padding: "6px 16px 16px" }}>
-        {recExp.length === 0 && <div className="hint" style={{ padding: "10px 0" }}>No recurring expenses yet. Add rent, tuition or subscriptions from the <strong>+</strong> button (tick "Repeat every month").</div>}
-        {recExp.map((r) => {
-          const c = catOf(r.category_id);
-          return (
+      <Section title="Automation" badge={recs.length + recExp.length || null}>
+        <label className="fl" style={{ marginTop: 0 }}>Recurring income</label>
+        <div className="card" style={{ padding: "6px 16px 16px" }}>
+          {recs.length === 0 && <div className="hint" style={{ padding: "10px 0" }}>No recurring income yet. Add your salary below so it appears automatically every month.</div>}
+          {recs.map((r) => (
             <div className="mgr-row" key={r.id}>
-              <div className="ic ic-sm" style={{ background: hexA(c.color, 0.14) }}>{c.icon}</div>
-              <div className="nm">{c.name} · {fmt(r.amount)}<div className="hint" style={{ margin: 0 }}>day {r.day_of_month} · {whoName(r.paid_by)}{r.note ? " · " + r.note : ""}</div></div>
-              <button className="x" onClick={() => delRecExp(r.id)}>✕</button>
+              <div className="ic ic-sm" style={{ background: hexA("#0f766e", 0.14) }}>💰</div>
+              <div className="nm">{r.source} · {fmt(r.amount)}<div className="hint" style={{ margin: 0 }}>day {r.day_of_month} · {whoName(r.received_by)}</div></div>
+              <button className="x" onClick={() => delRec(r.id)}>✕</button>
             </div>
-          );
-        })}
-      </div>
-
-      <div className="section-h">
-        Accounts (where your money is)
-        {accounts.length > 0 && <span className="pill">{fmt(accTotal)}</span>}
-      </div>
-      <div className="card" style={{ padding: "6px 16px 16px" }}>
-        {accounts.length === 0 && (
-          <div className="hint" style={{ padding: "10px 0" }}>
-            Add your banks, e-wallets and cash so you can see where your money sits. You keep each balance up to date here.
-          </div>
-        )}
-        {accounts.map((a) => (
-          <AccountRow key={a.id} a={a} onSave={saveAccount} onDelete={delAccount} />
-        ))}
-        <label className="fl">Add an account</label>
-        <div className="chips">
-          {ACCOUNT_ICONS.map((ic) => (
-            <button type="button" key={ic}
-              className={"chip" + (ic === aIcon ? " sel" : "")}
-              onClick={() => setAIcon(ic)}>{ic}</button>
           ))}
-        </div>
-        <div className="rec-grid" style={{ marginTop: 10 }}>
-          <input value={aName} maxLength={28} placeholder="Name (e.g. BPI, GCash)" onChange={(e) => setAName(e.target.value)} />
-          <input inputMode="decimal" placeholder={CURRENCY + " balance"} value={aBal} onChange={(e) => setABal(e.target.value)} />
-        </div>
-        <button className="btn" onClick={addAccount} disabled={busy} style={{ marginTop: 12 }}>Add account</button>
-        <div className="hint">These balances are manual — update them whenever money moves.</div>
-      </div>
-
-      <div className="section-h">People <span className="pill">{members.length}</span></div>
-      <div className="card" style={{ padding: "6px 16px 16px" }}>
-        {members.map((m) => (
-          <div className="mgr-row" key={m.id}>
-            <div className="nm">👤 {m.display_name}</div>
-            {m.role === "admin"
-              ? <span className="pill" style={{ background: "var(--brand-soft)", color: "#0b554f" }}>admin</span>
-              : MODE === "local" && members.length > 1
-                ? <button className="x" onClick={() => removePerson(m.id)}>✕</button>
-                : <span className="pill">member</span>}
+          <label className="fl">Add salary / recurring income</label>
+          <div className="rec-grid">
+            <input inputMode="decimal" placeholder={CURRENCY + " amount"} value={rAmount} onChange={(e) => setRAmount(e.target.value)} />
+            <input placeholder="Source (e.g. Salary)" value={rSource} onChange={(e) => setRSource(e.target.value)} />
+            <input inputMode="numeric" placeholder="Day (1-31)" value={rDay} onChange={(e) => setRDay(e.target.value)} />
+            <select value={rWho ?? ""} onChange={(e) => setRWho(e.target.value)}>
+              {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+            </select>
           </div>
-        ))}
-        {MODE === "local" ? (
-          <>
-            <div className="add-inline">
-              <input value={newPerson} maxLength={24} placeholder="Add a person…"
-                onChange={(e) => setNewPerson(e.target.value)} />
-              <button onClick={addPerson} disabled={busy}>Add</button>
-            </div>
-            <div className="hint">Built to scale — add as many household members as you like.</div>
-          </>
-        ) : isAdmin ? (
-          <>
-            <button className="btn ghost" style={{ marginTop: 8 }} onClick={copyInvite}>🔗 Copy invite link</button>
-            <div className="hint">Send this link to family. When they sign up through it, they join this household automatically.</div>
-          </>
-        ) : (
-          <div className="hint">Only the household admin can invite new members.</div>
-        )}
-      </div>
-
-      <div className="section-h">Categories</div>
-      <div className="card" style={{ padding: "6px 16px 16px" }}>
-        {categories.map((c) => (
-          <div className="mgr-row" key={c.id}>
-            <div className="ic ic-sm" style={{ background: hexA(c.color, 0.14) }}>{c.icon}</div>
-            <div className="nm">{c.name}</div>
-            {c.is_default ? <span className="pill">default</span>
-              : <button className="x" onClick={() => delCat(c.id)}>✕</button>}
-          </div>
-        ))}
-        <div className="add-inline">
-          <input value={newCat} maxLength={24} placeholder="Add a category…"
-            onChange={(e) => setNewCat(e.target.value)} />
-          <button onClick={addCat} disabled={busy}>Add</button>
+          <button className="btn" onClick={addRec} disabled={busy} style={{ marginTop: 12 }}>Add recurring income</button>
+          <div className="hint">e.g. {CURRENCY}30,000 Salary on day 15 — auto-counted every month.</div>
         </div>
-        <div className="hint">Standard list plus your own additions.</div>
-      </div>
 
-      <div className="section-h">Preferences</div>
-      <div className="card" style={{ padding: 16 }}>
-        <label className="fl" style={{ marginTop: 0 }}>Currency {!isAdmin && <span className="hint" style={{ margin: 0 }}>(admin only)</span>}</label>
-        <select value={curCode} onChange={(e) => changeCurrency(e.target.value)} disabled={!isAdmin}>
-          {CURRENCIES.map((code) => (
-            <option key={code} value={code}>{CURRENCY_SYMBOLS[code]} {code}</option>
-          ))}
-        </select>
-
-        <label className="switch" style={{ marginTop: 14 }}>
-          <input type="checkbox" checked={dark} onChange={toggleDark} />
-          <span>Dark mode 🌙</span>
-        </label>
-      </div>
-
-      <div className="section-h">Account &amp; data</div>
-      <div className="card" style={{ padding: 16 }}>
-        <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 2 }}>
-          👤 Logged in as {session?.user?.display_name || "You"}
-          {isAdmin && <span className="pill" style={{ marginLeft: 6, background: "var(--brand-soft)", color: "#0b554f" }}>admin</span>}
-        </div>
-        <div className="hint" style={{ margin: "0 0 12px" }}>
-          {session?.household?.name || "My Household"} · Mode: {MODE === "cloud" ? "Shared (cloud)" : "Local (this device)"}
-        </div>
-        <button className="btn ghost" onClick={exportCSV}>⬇️ Export CSV</button>
-        <button className="btn ghost" onClick={exportBackup}>⬇️ Export backup (.json)</button>
-        {MODE === "cloud" && <button className="btn danger" onClick={logOut}>🚪 Log out</button>}
-      </div>
-
-      <div className="section-h" style={{ color: "var(--danger)" }}>⚠️ Danger zone</div>
-      <div className="card" style={{ padding: 16, borderColor: "var(--danger)" }}>
-        {!isAdmin ? (
-          <div className="hint" style={{ margin: 0 }}>Only the household admin can reset or erase shared data.</div>
-        ) : (
-          <>
-            <div style={{ fontWeight: 700, fontSize: 14.5 }}>Reset data (start fresh)</div>
-            <div className="hint" style={{ margin: "4px 0 10px" }}>
-              Deletes every transaction and zeroes account balances, but keeps your accounts, categories and people. Good for a clean new month or year.
-            </div>
-            <button className="btn danger" onClick={resetData} disabled={busy}>Reset data</button>
-
-            <div style={{ fontWeight: 700, fontSize: 14.5, marginTop: 18 }}>Erase everything</div>
-            <div className="hint" style={{ margin: "4px 0 10px" }}>
-              Removes ALL data including your custom accounts and categories, then restores the default setup. The household{MODE === "cloud" ? " and everyone's logins stay" : " stays"} intact.
-            </div>
-            <button className="btn danger" onClick={factoryReset} disabled={busy}>Erase everything</button>
-
-            {MODE === "cloud" && (
-              <div className="hint" style={{ marginTop: 16 }}>
-                Note: permanently deleting the whole household and member logins must be done from your Supabase dashboard — it can't be undone and isn't available in-app for safety.
+        <label className="fl">Recurring expenses</label>
+        <div className="card" style={{ padding: "6px 16px 16px" }}>
+          {recExp.length === 0 && <div className="hint" style={{ padding: "10px 0" }}>No recurring expenses yet. Add rent, tuition or subscriptions from the <strong>+</strong> button (tick "Repeat every month").</div>}
+          {recExp.map((r) => {
+            const c = catOf(r.category_id);
+            return (
+              <div className="mgr-row" key={r.id}>
+                <div className="ic ic-sm" style={{ background: hexA(c.color, 0.14) }}>{c.icon}</div>
+                <div className="nm">{c.name} · {fmt(r.amount)}<div className="hint" style={{ margin: 0 }}>day {r.day_of_month} · {whoName(r.paid_by)}{r.note ? " · " + r.note : ""}</div></div>
+                <button className="x" onClick={() => delRecExp(r.id)}>✕</button>
               </div>
-            )}
-          </>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      </Section>
+
+      <Section title="People" badge={members.length}>
+        <div className="card" style={{ padding: "6px 16px 16px" }}>
+          {members.map((m) => (
+            <div className="mgr-row" key={m.id}>
+              <div className="nm">👤 {m.display_name}</div>
+              {m.role === "admin"
+                ? <span className="pill" style={{ background: "var(--brand-soft)", color: "#0b554f" }}>admin</span>
+                : MODE === "local" && members.length > 1
+                  ? <button className="x" onClick={() => removePerson(m.id)}>✕</button>
+                  : <span className="pill">member</span>}
+            </div>
+          ))}
+          {MODE === "local" ? (
+            <>
+              <div className="add-inline">
+                <input value={newPerson} maxLength={24} placeholder="Add a person…"
+                  onChange={(e) => setNewPerson(e.target.value)} />
+                <button onClick={addPerson} disabled={busy}>Add</button>
+              </div>
+              <div className="hint">Built to scale — add as many household members as you like.</div>
+            </>
+          ) : isAdmin ? (
+            <>
+              <button className="btn ghost" style={{ marginTop: 8 }} onClick={copyInvite}>🔗 Copy invite link</button>
+              <div className="hint">Send this link to family. When they sign up through it, they join this household automatically.</div>
+            </>
+          ) : (
+            <div className="hint">Only the household admin can invite new members.</div>
+          )}
+        </div>
+      </Section>
+
+      <Section title="Categories" badge={categories.length}>
+        <div className="card" style={{ padding: "6px 16px 16px" }}>
+          {categories.map((c) => (
+            <div className="mgr-row" key={c.id}>
+              <div className="ic ic-sm" style={{ background: hexA(c.color, 0.14) }}>{c.icon}</div>
+              <div className="nm">{c.name}</div>
+              {c.is_default ? <span className="pill">default</span>
+                : <button className="x" onClick={() => delCat(c.id)}>✕</button>}
+            </div>
+          ))}
+          <div className="add-inline">
+            <input value={newCat} maxLength={24} placeholder="Add a category…"
+              onChange={(e) => setNewCat(e.target.value)} />
+            <button onClick={addCat} disabled={busy}>Add</button>
+          </div>
+          <div className="hint">Standard list plus your own additions.</div>
+        </div>
+      </Section>
+
+      <Section title="Appearance & currency">
+        <div className="card" style={{ padding: 16 }}>
+          <label className="fl" style={{ marginTop: 0 }}>Currency {!isAdmin && <span className="hint" style={{ margin: 0 }}>(admin only)</span>}</label>
+          <select value={curCode} onChange={(e) => changeCurrency(e.target.value)} disabled={!isAdmin}>
+            {CURRENCIES.map((code) => (
+              <option key={code} value={code}>{CURRENCY_SYMBOLS[code]} {code}</option>
+            ))}
+          </select>
+
+          <label className="switch" style={{ marginTop: 14 }}>
+            <input type="checkbox" checked={dark} onChange={toggleDark} />
+            <span>Dark mode 🌙</span>
+          </label>
+        </div>
+      </Section>
+
+      <Section title="Account & data">
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 2 }}>
+            👤 Logged in as {session?.user?.display_name || "You"}
+            {isAdmin && <span className="pill" style={{ marginLeft: 6, background: "var(--brand-soft)", color: "#0b554f" }}>admin</span>}
+          </div>
+          <div className="hint" style={{ margin: "0 0 12px" }}>
+            {session?.household?.name || "My Household"} · Mode: {MODE === "cloud" ? "Shared (cloud)" : "Local (this device)"}
+          </div>
+          <button className="btn ghost" onClick={exportCSV}>⬇️ Export CSV</button>
+          <button className="btn ghost" onClick={exportBackup}>⬇️ Export backup (.json)</button>
+          {MODE === "cloud" && <button className="btn danger" onClick={logOut}>🚪 Log out</button>}
+        </div>
+      </Section>
+
+      <Section title="⚠️ Danger zone" danger>
+        <div className="card" style={{ padding: 16, borderColor: "var(--danger)" }}>
+          {!isAdmin ? (
+            <div className="hint" style={{ margin: 0 }}>Only the household admin can reset or erase shared data.</div>
+          ) : (
+            <>
+              <div style={{ fontWeight: 700, fontSize: 14.5 }}>Reset data (start fresh)</div>
+              <div className="hint" style={{ margin: "4px 0 10px" }}>
+                Deletes every transaction and zeroes account balances, but keeps your accounts, categories and people. Good for a clean new month or year.
+              </div>
+              <button className="btn danger" onClick={resetData} disabled={busy}>Reset data</button>
+
+              <div style={{ fontWeight: 700, fontSize: 14.5, marginTop: 18 }}>Erase everything</div>
+              <div className="hint" style={{ margin: "4px 0 10px" }}>
+                Removes ALL data including your custom accounts and categories, then restores the default setup. The household{MODE === "cloud" ? " and everyone's logins stay" : " stays"} intact.
+              </div>
+              <button className="btn danger" onClick={factoryReset} disabled={busy}>Erase everything</button>
+
+              {MODE === "cloud" && (
+                <div className="hint" style={{ marginTop: 16 }}>
+                  Note: permanently deleting the whole household and member logins must be done from your Supabase dashboard — it can't be undone and isn't available in-app for safety.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </Section>
 
       <div className="hint" style={{ textAlign: "center", marginTop: 18 }}>
-        Home Finance Tracker · Phase 1–3<br />
+        Home Finance Tracker<br />
         Connect Claude via the MCP server (see README) to add &amp; query expenses by chat.
       </div>
     </>
+  );
+}
+
+// Collapsible settings group built on native <details> (accessible + keyboard-friendly).
+function Section({ title, badge, danger, defaultOpen, children }) {
+  return (
+    <details className="acc" open={defaultOpen}>
+      <summary className={"acc-sum" + (danger ? " danger" : "")}>
+        {title}
+        {badge != null && badge !== false && <span className="pill">{badge}</span>}
+        <span className="chev">▾</span>
+      </summary>
+      <div className="acc-body">{children}</div>
+    </details>
   );
 }
 

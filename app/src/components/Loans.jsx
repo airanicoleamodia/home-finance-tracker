@@ -3,6 +3,7 @@ import { api } from "../lib/store.js";
 import { fmt } from "../lib/format.js";
 import { useToast } from "../ui/ToastProvider.jsx";
 import { useConfirm } from "../ui/ConfirmProvider.jsx";
+import { SkeletonList } from "../ui/Skeleton.jsx";
 import LoanSheet from "./LoanSheet.jsx";
 
 export default function Loans({ accounts = [], refreshKey, onChange }) {
@@ -46,7 +47,7 @@ export default function Loans({ accounts = [], refreshKey, onChange }) {
     onChange && onChange();
   }
 
-  if (loans === null) return <div className="center">Loading…</div>;
+  if (loans === null) return <SkeletonList rows={5} />;
 
   const lent = loans.filter((l) => l.is_lent);
   const owed = loans.filter((l) => !l.is_lent);

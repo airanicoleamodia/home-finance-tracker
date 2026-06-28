@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, weeklyExpenseTotals } from "../lib/store.js";
 import { fmt, ymKey, MONTHS, PALETTE, hexA, todayISO, shiftISO } from "../lib/format.js";
+import { SkeletonList } from "../ui/Skeleton.jsx";
 import AccountSheet from "./AccountSheet.jsx";
 
 export default function Dashboard({ cur, categories, refreshKey }) {
@@ -22,7 +23,7 @@ export default function Dashboard({ cur, categories, refreshKey }) {
     return () => { on = false; };
   }, [monthKey, refreshKey]);
 
-  if (data === null) return <div className="center">Loading…</div>;
+  if (data === null) return <SkeletonList rows={6} />;
 
   const { expenses, income, trend, accounts, loans } = data;
   const catOf = (id) => categories.find((c) => c.id === id) || { name: "Uncategorized", icon: "❓", color: "#999" };

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/store.js";
 import { fmt, ymKey, MONTHS, hexA } from "../lib/format.js";
+import { SkeletonList } from "../ui/Skeleton.jsx";
 
 export default function History({ cur, categories, members, accounts = [], refreshKey, onEdit }) {
   const [rows, setRows] = useState(null);
@@ -39,7 +40,7 @@ export default function History({ cur, categories, members, accounts = [], refre
     return () => { on = false; };
   }, [monthKey, refreshKey]);
 
-  if (rows === null) return <div className="center">Loading…</div>;
+  if (rows === null) return <SkeletonList rows={6} />;
 
   const catOf = (id) => categories.find((c) => c.id === id) || { name: "Uncategorized", icon: "❓", color: "#999" };
   const nameOf = (id) => members.find((m) => m.id === id)?.display_name || "—";
@@ -58,6 +59,89 @@ export default function History({ cur, categories, members, accounts = [], refre
   };
   const shown = rows.filter((r) =>
     (filter === "all" || r._kind === filter || (filter === "loans" && isLoanKind(r._kind))) && matches(r));
+
+  // Group consecutive (already date-sorted) rows under a day header.
+  const groups = [];
+  shown.forEach((r) => {
+    const last = groups[groups.length - 1];
+    if (last && last.date === r._date) last.rows.push(r);
+    else groups.push({ date: r._date, rows: [r] });
+  });
+  const dayLabel = (s) => {
+    const d = new Date(s + "T00:00:00");
+    const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+    return `${wd}, ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`;
+  };
+
+  function renderRow(r) {
+    if (r._kind === "loan" || r._kind === "repay") {
+      const inflow = r._kind === "loan" ? !r.is_lent : r.is_lent; // cash coming in?
+      const title = r._kind === "loan"
+        ? (r.is_lent ? `Lent to ${r.counterparty || "—"}` : `Borrowed from ${r.counterparty || "—"}`)
+        : (r.is_lent ? `${r.counterparty || "—"} repaid us` : `Repaid ${r.counterparty || "—"}`);
+      const amt = r._kind === "loan" ? r.principal : r.amount;
+      const sub = `${r.account_id ? accName(r.account_id) : ""}${r.note ? (r.account_id ? " · " : "") + r.note : ""}` || "Loan activity";
+      return (
+        <div className="item" key={r._kind + r.id} style={{ cursor: "default" }}>
+          <div className="ic" style={{ background: hexA("#d97706", 0.14) }}>🤝</div>
+          <div className="it-mid">
+            <div className="t1">{title}<span className="pill" style={{ marginLeft: 6 }}>loan</span></div>
+            <div className="t2">{sub}</div>
+          </div>
+          <div className="it-amt" style={{ color: inflow ? "var(--brand)" : undefined }}>{inflow ? "+" : "−"}{fmt(amt)}</div>
+        </div>
+      );
+    }
+    if (r._kind === "transfer") {
+      return (
+        <div className="item" key={r.id} style={{ cursor: "default" }}>
+          <div className="ic" style={{ background: hexA("#6b7280", 0.14) }}>⇄</div>
+          <div className="it-mid">
+            <div className="t1">{accName(r.from_account)} → {accName(r.to_account)}</div>
+            <div className="t2">{r.note || "Transfer"}</div>
+          </div>
+          <div className="it-amt" style={{ color: "var(--muted)" }}>{fmt(r.amount)}</div>
+        </div>
+      );
+    }
+    if (r._kind === "income") {
+      const sub = `${nameOf(r.received_by)}${r.recurring ? " · auto" : ""}${r.note ? " · " + r.note : ""}`;
+      const clickable = !r.recurring;
+      return (
+        <button className="item" key={r.id} disabled={!clickable}
+          style={!clickable ? { cursor: "default" } : undefined}
+          onClick={() => clickable && onEdit("income", r)}>
+          <div className="ic" style={{ background: hexA("#0f766e", 0.14) }}>💰</div>
+          <div className="it-mid">
+            <div className="t1">{r.source}{r.recurring && <span className="pill" style={{ marginLeft: 6 }}>monthly</span>}</div>
+            <div className="t2">{sub}</div>
+          </div>
+          <div className="it-amt" style={{ color: "var(--brand)" }}>+{fmt(r.amount)}</div>
+        </button>
+      );
+    }
+    const c = catOf(r.category_id);
+    const isFee = Boolean(r.transfer_id);
+    const clickable = !r.recurring && !isFee;
+    const itemLabel = (it) => typeof it === "string" ? it : `${it.name}${it.amount ? " " + fmt(it.amount) : ""}`;
+    const itemsTxt = Array.isArray(r.items) && r.items.length ? " · 📋 " + r.items.map(itemLabel).join(", ") : "";
+    const sub = `${nameOf(r.paid_by)}${r.account_id ? " · " + accName(r.account_id) : ""}${r.note ? " · " + r.note : ""}${itemsTxt}`;
+    return (
+      <button className="item" key={r.id} disabled={!clickable}
+        style={!clickable ? { cursor: "default" } : undefined}
+        onClick={() => clickable && onEdit("expense", r)}>
+        <div className="ic" style={{ background: hexA(c.color, 0.14) }}>{isFee ? "⇄" : c.icon}</div>
+        <div className="it-mid">
+          <div className="t1">{c.name}
+            {r.recurring && <span className="pill" style={{ marginLeft: 6 }}>monthly</span>}
+            {isFee && <span className="pill" style={{ marginLeft: 6 }}>transfer fee</span>}
+          </div>
+          <div className="t2">{sub}</div>
+        </div>
+        <div className="it-amt">−{fmt(r.amount)}</div>
+      </button>
+    );
+  }
 
   return (
     <>
@@ -79,77 +163,12 @@ export default function History({ cur, categories, members, accounts = [], refre
         <div className="card empty"><div className="em">🧾</div><div className="et">Nothing here this month yet.</div></div>
       ) : (
         <div className="card list">
-          {shown.map((r) => {
-            const d = new Date(r._date + "T00:00:00");
-            if (r._kind === "loan" || r._kind === "repay") {
-              const inflow = r._kind === "loan" ? !r.is_lent : r.is_lent; // cash coming in?
-              const title = r._kind === "loan"
-                ? (r.is_lent ? `Lent to ${r.counterparty || "—"}` : `Borrowed from ${r.counterparty || "—"}`)
-                : (r.is_lent ? `${r.counterparty || "—"} repaid us` : `Repaid ${r.counterparty || "—"}`);
-              const amt = r._kind === "loan" ? r.principal : r.amount;
-              const sub = `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}${r.account_id ? " · " + accName(r.account_id) : ""}${r.note ? " · " + r.note : ""}`;
-              return (
-                <div className="item" key={r._kind + r.id} style={{ cursor: "default" }}>
-                  <div className="ic" style={{ background: hexA("#d97706", 0.14) }}>🤝</div>
-                  <div className="it-mid">
-                    <div className="t1">{title}<span className="pill" style={{ marginLeft: 6 }}>loan</span></div>
-                    <div className="t2">{sub}</div>
-                  </div>
-                  <div className="it-amt" style={{ color: inflow ? "var(--brand)" : undefined }}>{inflow ? "+" : "−"}{fmt(amt)}</div>
-                </div>
-              );
-            }
-            if (r._kind === "transfer") {
-              const sub = `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}${r.note ? " · " + r.note : ""}`;
-              return (
-                <div className="item" key={r.id} style={{ cursor: "default" }}>
-                  <div className="ic" style={{ background: hexA("#6b7280", 0.14) }}>⇄</div>
-                  <div className="it-mid">
-                    <div className="t1">{accName(r.from_account)} → {accName(r.to_account)}</div>
-                    <div className="t2">{sub}</div>
-                  </div>
-                  <div className="it-amt" style={{ color: "var(--muted)" }}>{fmt(r.amount)}</div>
-                </div>
-              );
-            }
-            if (r._kind === "income") {
-              const sub = `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${nameOf(r.received_by)}${r.recurring ? " · auto" : ""}${r.note ? " · " + r.note : ""}`;
-              const clickable = !r.recurring;
-              return (
-                <button className="item" key={r.id} disabled={!clickable}
-                  style={!clickable ? { cursor: "default" } : undefined}
-                  onClick={() => clickable && onEdit("income", r)}>
-                  <div className="ic" style={{ background: hexA("#0f766e", 0.14) }}>💰</div>
-                  <div className="it-mid">
-                    <div className="t1">{r.source}{r.recurring && <span className="pill" style={{ marginLeft: 6 }}>monthly</span>}</div>
-                    <div className="t2">{sub}</div>
-                  </div>
-                  <div className="it-amt" style={{ color: "var(--brand)" }}>+{fmt(r.amount)}</div>
-                </button>
-              );
-            }
-            const c = catOf(r.category_id);
-            const isFee = Boolean(r.transfer_id);
-            const clickable = !r.recurring && !isFee;
-            const itemLabel = (it) => typeof it === "string" ? it : `${it.name}${it.amount ? " " + fmt(it.amount) : ""}`;
-            const itemsTxt = Array.isArray(r.items) && r.items.length ? " · 📋 " + r.items.map(itemLabel).join(", ") : "";
-            const sub = `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${nameOf(r.paid_by)}${r.account_id ? " · " + accName(r.account_id) : ""}${r.note ? " · " + r.note : ""}${itemsTxt}`;
-            return (
-              <button className="item" key={r.id} disabled={!clickable}
-                style={!clickable ? { cursor: "default" } : undefined}
-                onClick={() => clickable && onEdit("expense", r)}>
-                <div className="ic" style={{ background: hexA(c.color, 0.14) }}>{isFee ? "⇄" : c.icon}</div>
-                <div className="it-mid">
-                  <div className="t1">{c.name}
-                    {r.recurring && <span className="pill" style={{ marginLeft: 6 }}>monthly</span>}
-                    {isFee && <span className="pill" style={{ marginLeft: 6 }}>transfer fee</span>}
-                  </div>
-                  <div className="t2">{sub}</div>
-                </div>
-                <div className="it-amt">−{fmt(r.amount)}</div>
-              </button>
-            );
-          })}
+          {groups.map((g) => (
+            <div key={g.date}>
+              <div className="day-divider">{dayLabel(g.date)}</div>
+              {g.rows.map(renderRow)}
+            </div>
+          ))}
         </div>
       )}
     </>

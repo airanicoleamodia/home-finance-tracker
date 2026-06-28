@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/store.js";
 import { fmt, ymKey, MONTHS } from "../lib/format.js";
+import { SkeletonList } from "../ui/Skeleton.jsx";
 
 export default function Budgets({ cur, categories, refreshKey, onChange }) {
   const monthKey = ymKey(cur);
@@ -21,7 +22,7 @@ export default function Budgets({ cur, categories, refreshKey, onChange }) {
 
   useEffect(() => { reload(); /* eslint-disable-next-line */ }, [monthKey, refreshKey]);
 
-  if (budgets === null) return <div className="center">Loading…</div>;
+  if (budgets === null) return <SkeletonList rows={6} />;
 
   const limitOf = (id) => budgets.find((b) => b.category_id === id)?.amount ?? null;
 
@@ -39,7 +40,7 @@ export default function Budgets({ cur, categories, refreshKey, onChange }) {
     <>
       <div className="section-h">Budgets · {MONTHS[cur.getMonth()]}</div>
       <div className="hint" style={{ margin: "0 4px 12px" }}>
-        Set a monthly limit per category. Bars turn orange near the limit and red when over.
+        Set a monthly limit per category. A “Near” tag shows at 80% and “Over” once you pass the limit.
       </div>
 
       <div className="card">
@@ -53,26 +54,29 @@ export default function Budgets({ cur, categories, refreshKey, onChange }) {
           const used = spent[c.id] || 0;
           const pct = limit ? (used / limit) * 100 : 0;
           const cls = pct >= 100 ? "over" : pct >= 80 ? "near" : "";
+          const status = pct >= 100 ? "Over" : pct >= 80 ? "Near" : "";
           const barCol = pct >= 100 ? "var(--danger)" : pct >= 80 ? "var(--warn)" : c.color;
           return (
             <div className="budget-row" key={c.id}>
               <div className="budget-top">
-                <span>{c.icon} {c.name}</span>
+                <span>
+                  {c.icon} {c.name}
+                  {status && <span className={"bpill " + cls}>{status}</span>}
+                </span>
                 <span className="spent">
                   <span className={cls}>{fmt(used)}</span> / {fmt(limit)}
                 </span>
               </div>
-              <div className="bar-track">
+              <div className="bar-track" role="progressbar"
+                aria-valuenow={Math.round(used)} aria-valuemin={0} aria-valuemax={Math.round(limit)}
+                aria-label={`${c.name}: ${fmt(used)} of ${fmt(limit)}${status ? " — " + status : ""}`}>
                 <div className="bar-fill" style={{ width: Math.min(100, pct) + "%", background: barCol }} />
               </div>
               <div className="budget-set">
                 <input inputMode="decimal" value={drafts[c.id] ?? ""}
                   onChange={(e) => setDrafts({ ...drafts, [c.id]: e.target.value })}
                   placeholder="Limit" />
-                <button onClick={() => saveLimit(c.id)}
-                  style={{ border: "none", background: "var(--brand)", color: "#fff", borderRadius: 10, padding: "8px 14px", fontWeight: 700, cursor: "pointer" }}>
-                  Save
-                </button>
+                <button onClick={() => saveLimit(c.id)}>Save</button>
               </div>
             </div>
           );
@@ -91,10 +95,7 @@ export default function Budgets({ cur, categories, refreshKey, onChange }) {
                   <input inputMode="decimal" value={drafts[c.id] ?? ""}
                     onChange={(e) => setDrafts({ ...drafts, [c.id]: e.target.value })}
                     placeholder="Set monthly limit" />
-                  <button onClick={() => saveLimit(c.id)}
-                    style={{ border: "none", background: "var(--brand)", color: "#fff", borderRadius: 10, padding: "8px 14px", fontWeight: 700, cursor: "pointer" }}>
-                    Set
-                  </button>
+                  <button onClick={() => saveLimit(c.id)}>Set</button>
                 </div>
               </div>
             ))}
