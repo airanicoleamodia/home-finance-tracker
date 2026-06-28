@@ -67,7 +67,7 @@ export default function Dashboard({ cur, categories, refreshKey }) {
         ) : (
           accounts.map((a) => (
             <button className="mgr-row acct-row" key={a.id} onClick={() => setAcctSheet(a)} title="View transactions">
-              <div className="ic" style={{ width: 32, height: 32, borderRadius: 9, fontSize: 16, background: "#f0f2f2", display: "flex", alignItems: "center", justifyContent: "center" }}>{a.icon}</div>
+              <div className="ic ic-sm" style={{ background: "#f0f2f2" }}>{a.icon}</div>
               <div className="nm">{a.name}</div>
               <strong className="acc-bal">{fmt(a.balance)}</strong>
               <span className="chev">›</span>
@@ -166,14 +166,14 @@ function SpendByCategory({ expenses, total, catOf }) {
     <div className="card" style={{ padding: 14 }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
         <svg viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Spending by category" style={{ flex: "0 0 auto" }}>
-          <circle r={R} cx="60" cy="60" fill="none" stroke="#eef1f0" strokeWidth="14" />
+          <circle r={R} cx="60" cy="60" fill="none" stroke="var(--chart-track)" strokeWidth="14" />
           {segs.map((s, i) => (
             <circle key={i} r={R} cx="60" cy="60" fill="none" stroke={s.col} strokeWidth="14"
               strokeDasharray={`${s.len} ${C - s.len}`} strokeDashoffset={s.off}
               transform="rotate(-90 60 60)" strokeLinecap="butt" />
           ))}
-          <text x="60" y="56" textAnchor="middle" fontSize="11" fill="#6b7a77">Total</text>
-          <text x="60" y="72" textAnchor="middle" fontSize="13" fontWeight="700" fill="#0f172a">{fmt(total)}</text>
+          <text x="60" y="56" textAnchor="middle" fontSize="11" fill="var(--muted)">Total</text>
+          <text x="60" y="72" textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--ink)">{fmt(total)}</text>
         </svg>
         <div style={{ flex: "1 1 160px", minWidth: 160, display: "flex", flexDirection: "column", gap: 8 }}>
           {segs.map((s, i) => (
@@ -181,7 +181,7 @@ function SpendByCategory({ expenses, total, catOf }) {
               <span style={{ width: 12, height: 12, borderRadius: 4, background: s.col, flex: "0 0 auto" }} />
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.c.icon} {s.c.name}</span>
               <strong style={{ flex: "0 0 auto" }}>{fmt(s.v)}</strong>
-              <span style={{ flex: "0 0 auto", color: "#6b7a77", fontSize: 12, width: 34, textAlign: "right" }}>{Math.round((s.v / total) * 100)}%</span>
+              <span style={{ flex: "0 0 auto", color: "var(--muted)", fontSize: 12, width: 34, textAlign: "right" }}>{Math.round((s.v / total) * 100)}%</span>
             </div>
           ))}
         </div>
@@ -288,14 +288,14 @@ function DailyBars({ refreshKey }) {
                     <title>{fmt(d.expense)}</title>
                     {/* transparent full-height hit target so short/zero bars stay tappable */}
                     <rect x={x} y={H - 22 - (H - 42)} width={bw} height={H - 42} fill="transparent" />
-                    <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="#0f766e"
+                    <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="var(--brand)"
                       fillOpacity={sel == null || isSel ? 1 : 0.45} />
                     {isSel && (
-                      <text x={x + bw * 0.5} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="#0f172a">
+                      <text x={x + bw * 0.5} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--ink)">
                         {fmt(d.expense)}
                       </text>
                     )}
-                    <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="#6b7a77">
+                    <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--muted)">
                       {WEEKDAYS[new Date(d.day + "T00:00:00").getDay()]}
                     </text>
                   </g>
@@ -303,7 +303,7 @@ function DailyBars({ refreshKey }) {
               })}
             </svg>
             <div className="legend-inline">
-              <span><i style={{ background: "#0f766e" }} /> Spent · {fmt(total)}</span>
+              <span><i style={{ background: "var(--brand)" }} /> Spent · {fmt(total)}</span>
             </div>
           </>
         );
@@ -339,20 +339,20 @@ function WeeklyBars({ expenses, monthKey }) {
               <title>{fmt(w.total)}</title>
               {/* transparent full-height hit target so short/zero bars stay tappable */}
               <rect x={x} y={H - 22 - (H - 42)} width={bw} height={H - 42} fill="transparent" />
-              <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="#0f766e"
+              <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="var(--brand)"
                 fillOpacity={sel == null || isSel ? 1 : 0.45} />
               {isSel && (
-                <text x={x + bw * 0.5} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="#0f172a">
+                <text x={x + bw * 0.5} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--ink)">
                   {fmt(w.total)}
                 </text>
               )}
-              <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="#6b7a77">{w.label}</text>
+              <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--muted)">{w.label}</text>
             </g>
           );
         })}
       </svg>
       <div className="legend-inline">
-        <span><i style={{ background: "#0f766e" }} /> Spent · {fmt(total)}</span>
+        <span><i style={{ background: "var(--brand)" }} /> Spent · {fmt(total)}</span>
       </div>
     </div>
   );
@@ -375,7 +375,7 @@ function Trend({ trend }) {
         <rect x={bx} y={H - 22 - h} width={w} height={h} rx="3" fill={fill}
           fillOpacity={sel == null || isSel ? 1 : 0.45} />
         {isSel && (
-          <text x={bx + w / 2} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="#0f172a">
+          <text x={bx + w / 2} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--ink)">
             {fmt(value)}
           </text>
         )}
@@ -391,9 +391,9 @@ function Trend({ trend }) {
           const eh = (t.expense / max) * (H - 42);
           return (
             <g key={i}>
-              <Bar bx={x + bw * 0.18} h={ih} fill="#0f766e" value={t.income} k={`${i}:income`} />
-              <Bar bx={x + bw * 0.5} h={eh} fill="#cbd5d2" value={t.expense} k={`${i}:expense`} />
-              <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="#6b7a77">
+              <Bar bx={x + bw * 0.18} h={ih} fill="var(--brand)" value={t.income} k={`${i}:income`} />
+              <Bar bx={x + bw * 0.5} h={eh} fill="var(--chart-alt)" value={t.expense} k={`${i}:expense`} />
+              <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--muted)">
                 {MONTHS[(t.month.split("-")[1] - 1)].slice(0, 1)}
               </text>
             </g>
@@ -401,8 +401,8 @@ function Trend({ trend }) {
         })}
       </svg>
       <div className="legend-inline">
-        <span><i style={{ background: "#0f766e" }} /> Income</span>
-        <span><i style={{ background: "#cbd5d2" }} /> Spent</span>
+        <span><i style={{ background: "var(--brand)" }} /> Income</span>
+        <span><i style={{ background: "var(--chart-alt)" }} /> Spent</span>
       </div>
     </div>
   );

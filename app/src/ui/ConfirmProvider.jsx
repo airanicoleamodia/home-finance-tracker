@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useFocusTrap } from "./useFocusTrap.js";
 
 const ConfirmCtx = createContext(null);
 
@@ -10,6 +11,8 @@ const fallback = (o = {}) => Promise.resolve(window.confirm(o.title || "Are you 
 export function ConfirmProvider({ children }) {
   const [state, setState] = useState(null); // { opts, resolve }
   const [typed, setTyped] = useState("");
+  const dialogRef = useRef(null);
+  useFocusTrap(dialogRef, !!state);
 
   const confirm = useCallback(
     (opts = {}) => new Promise((resolve) => { setTyped(""); setState({ opts, resolve }); }),
@@ -39,6 +42,7 @@ export function ConfirmProvider({ children }) {
         <div className="dialog-scrim" onClick={() => close(false)}>
           <div
             className="dialog"
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-label={o.title}

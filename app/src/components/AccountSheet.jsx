@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/store.js";
 import { fmt, MONTHS, hexA } from "../lib/format.js";
+import { useFocusTrap } from "../ui/useFocusTrap.js";
 
 // Shows every transaction that touched ONE account for the given month.
 export default function AccountSheet({ open, account, monthKey, categories = [], onClose }) {
   const [rows, setRows] = useState(null);
+  const sheetRef = useRef(null);
+  useFocusTrap(sheetRef, open);
 
   useEffect(() => {
     if (!open || !account) { setRows(null); return; }
@@ -47,7 +50,7 @@ export default function AccountSheet({ open, account, monthKey, categories = [],
   return (
     <>
       <div className={"scrim" + (open ? " open" : "")} onClick={onClose} />
-      <div className={"sheet" + (open ? " open" : "")}>
+      <div className={"sheet" + (open ? " open" : "")} ref={sheetRef} role="dialog" aria-modal="true" aria-label={(account?.name || "Account") + " — " + monthLabel}>
         <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">×</button>
         <div className="grab" />
 

@@ -202,7 +202,7 @@ export default function Settings({ session, categories, members, onChange }) {
         {recs.length === 0 && <div className="hint" style={{ padding: "10px 0" }}>No recurring income yet. Add your salary below so it appears automatically every month.</div>}
         {recs.map((r) => (
           <div className="mgr-row" key={r.id}>
-            <div className="ic" style={{ background: hexA("#0f766e", 0.14), width: 32, height: 32, borderRadius: 9, fontSize: 16 }}>💰</div>
+            <div className="ic ic-sm" style={{ background: hexA("#0f766e", 0.14) }}>💰</div>
             <div className="nm">{r.source} · {fmt(r.amount)}<div className="hint" style={{ margin: 0 }}>day {r.day_of_month} · {whoName(r.received_by)}</div></div>
             <button className="x" onClick={() => delRec(r.id)}>✕</button>
           </div>
@@ -227,7 +227,7 @@ export default function Settings({ session, categories, members, onChange }) {
           const c = catOf(r.category_id);
           return (
             <div className="mgr-row" key={r.id}>
-              <div className="ic" style={{ background: hexA(c.color, 0.14), width: 32, height: 32, borderRadius: 9, fontSize: 16 }}>{c.icon}</div>
+              <div className="ic ic-sm" style={{ background: hexA(c.color, 0.14) }}>{c.icon}</div>
               <div className="nm">{c.name} · {fmt(r.amount)}<div className="hint" style={{ margin: 0 }}>day {r.day_of_month} · {whoName(r.paid_by)}{r.note ? " · " + r.note : ""}</div></div>
               <button className="x" onClick={() => delRecExp(r.id)}>✕</button>
             </div>
@@ -299,7 +299,7 @@ export default function Settings({ session, categories, members, onChange }) {
       <div className="card" style={{ padding: "6px 16px 16px" }}>
         {categories.map((c) => (
           <div className="mgr-row" key={c.id}>
-            <div className="ic" style={{ background: hexA(c.color, 0.14), width: 32, height: 32, borderRadius: 9, fontSize: 16 }}>{c.icon}</div>
+            <div className="ic ic-sm" style={{ background: hexA(c.color, 0.14) }}>{c.icon}</div>
             <div className="nm">{c.name}</div>
             {c.is_default ? <span className="pill">default</span>
               : <button className="x" onClick={() => delCat(c.id)}>✕</button>}
@@ -402,8 +402,8 @@ function AccountRow({ a, onSave, onDelete }) {
 
   return (
     <div className="mgr-row">
-      <button type="button" className="ic" onClick={cycleIcon} title="Tap to change icon"
-        style={{ width: 32, height: 32, borderRadius: 9, fontSize: 16, background: "#f0f2f2", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer", padding: 0 }}>{a.icon}</button>
+      <button type="button" className="ic ic-sm" onClick={cycleIcon} title="Tap to change icon"
+        style={{ background: "#f0f2f2", border: "none", cursor: "pointer", padding: 0 }}>{a.icon}</button>
       <input className="acc-name" value={name} maxLength={28}
         onChange={(e) => setName(e.target.value)} onBlur={saveName}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />

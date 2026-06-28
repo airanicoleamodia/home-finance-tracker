@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/store.js";
 import { CURRENCY, todayISO } from "../lib/format.js";
 import { useToast } from "../ui/ToastProvider.jsx";
 import { useConfirm } from "../ui/ConfirmProvider.jsx";
+import { useFocusTrap } from "../ui/useFocusTrap.js";
 
 // Handles EXPENSE and INCOME entries (add + edit), recurring rules, and TRANSFERS.
 export default function ExpenseSheet({ open, kind: initialKind, entry, categories, members, accounts = [], onClose, onSaved }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const sheetRef = useRef(null);
+  useFocusTrap(sheetRef, open);
   const editing = Boolean(entry);
   const [kind, setKind] = useState("expense"); // "expense" | "income" | "transfer"
   const [amount, setAmount] = useState("");
@@ -153,7 +156,7 @@ export default function ExpenseSheet({ open, kind: initialKind, entry, categorie
   return (
     <>
       <div className={"scrim" + (open ? " open" : "")} onClick={onClose} />
-      <div className={"sheet" + (open ? " open" : "")}>
+      <div className={"sheet" + (open ? " open" : "")} ref={sheetRef} role="dialog" aria-modal="true" aria-label={title}>
         <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">×</button>
         <div className="grab" />
 

@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/store.js";
 import { CURRENCY, todayISO } from "../lib/format.js";
 import { useToast } from "../ui/ToastProvider.jsx";
+import { useFocusTrap } from "../ui/useFocusTrap.js";
 
 // Add a loan (lent out / borrowed) or record a repayment against an existing loan.
 export default function LoanSheet({ open, mode, loan, accounts = [], onClose, onSaved }) {
   const toast = useToast();
+  const sheetRef = useRef(null);
+  useFocusTrap(sheetRef, open);
   const repaying = mode === "repay";
   const editing = mode === "edit";
   const [isLent, setIsLent] = useState(true);
@@ -74,7 +77,7 @@ export default function LoanSheet({ open, mode, loan, accounts = [], onClose, on
   return (
     <>
       <div className={"scrim" + (open ? " open" : "")} onClick={onClose} />
-      <div className={"sheet" + (open ? " open" : "")}>
+      <div className={"sheet" + (open ? " open" : "")} ref={sheetRef} role="dialog" aria-modal="true" aria-label={title}>
         <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">×</button>
         <div className="grab" />
 
