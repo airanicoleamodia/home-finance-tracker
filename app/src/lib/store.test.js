@@ -379,6 +379,44 @@ describe("loans (local mode)", () => {
     const loan = (await api.getLoans()).find((x) => x.id === l.id);
     expect(loan.outstanding).toBe(800);
   });
+
+  it("editing only counterparty/note leaves the account balance untouched", async () => {
+    const l = await api.addLoan({ is_lent: true, counterparty: "Ana", principal: 1000, account_id: "a0", started_on: "2026-06-01" });
+    expect(await balanceOf("a0")).toBe(-1000);
+    await api.updateLoan(l.id, { counterparty: "Ana Cruz", principal: 1000, account_id: "a0", note: "updated", started_on: "2026-06-01", due_on: null });
+    expect(await balanceOf("a0")).toBe(-1000);
+    const loan = (await api.getLoans()).find((x) => x.id === l.id);
+    expect(loan.counterparty).toBe("Ana Cruz");
+    expect(loan.note).toBe("updated");
+  });
+
+  it("changing a lent loan's principal shifts the account balance by the delta", async () => {
+    const l = await api.addLoan({ is_lent: true, counterparty: "Ana", principal: 1000, account_id: "a0", started_on: "2026-06-01" });
+    expect(await balanceOf("a0")).toBe(-1000);
+    await api.updateLoan(l.id, { counterparty: "Ana", principal: 1500, account_id: "a0", note: "", started_on: "2026-06-01", due_on: null });
+    expect(await balanceOf("a0")).toBe(-1500);
+    await api.updateLoan(l.id, { counterparty: "Ana", principal: 600, account_id: "a0", note: "", started_on: "2026-06-01", due_on: null });
+    expect(await balanceOf("a0")).toBe(-600);
+  });
+
+  it("changing the linked account moves the principal effect across accounts", async () => {
+    const l = await api.addLoan({ is_lent: true, counterparty: "Ana", principal: 1000, account_id: "a0", started_on: "2026-06-01" });
+    expect(await balanceOf("a0")).toBe(-1000);
+    await api.updateLoan(l.id, { counterparty: "Ana", principal: 1000, account_id: "a1", note: "", started_on: "2026-06-01", due_on: null });
+    expect(await balanceOf("a0")).toBe(0);
+    expect(await balanceOf("a1")).toBe(-1000);
+  });
+
+  it("raising principal above repaid moves a settled loan back to outstanding", async () => {
+    const l = await api.addLoan({ is_lent: true, counterparty: "Ana", principal: 500, account_id: "a0", started_on: "2026-06-01" });
+    await api.addRepayment({ loan_id: l.id, amount: 500, account_id: "a0", paid_on: "2026-06-10" });
+    let loan = (await api.getLoans()).find((x) => x.id === l.id);
+    expect(loan.outstanding).toBe(0); // settled
+    await api.updateLoan(l.id, { counterparty: "Ana", principal: 800, account_id: "a0", note: "", started_on: "2026-06-01", due_on: null });
+    loan = (await api.getLoans()).find((x) => x.id === l.id);
+    expect(loan.repaid).toBe(500);
+    expect(loan.outstanding).toBe(300); // outstanding again
+  });
 });
 
 describe("danger zone (local mode)", () => {

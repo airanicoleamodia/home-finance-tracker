@@ -344,6 +344,19 @@ const localApi = {
     adjBal(l.account_id, l.is_lent ? -l.principal : +l.principal);
     lsave(); return l;
   },
+  async updateLoan(id, patch) {
+    const l = L.loans.find((x) => x.id === id);
+    if (l) {
+      adjBal(l.account_id, l.is_lent ? +l.principal : -l.principal); // reverse old disbursement
+      Object.assign(l, patch, {
+        principal: +patch.principal,
+        account_id: patch.account_id ?? l.account_id,
+        due_on: patch.due_on ?? null,
+      });
+      adjBal(l.account_id, l.is_lent ? -l.principal : +l.principal);  // apply new
+    }
+    lsave(); return l;
+  },
   async deleteLoan(id) {
     const l = L.loans.find((x) => x.id === id);
     if (l) {
@@ -726,6 +739,19 @@ const cloudApi = {
       .select().single();
     if (error) throw error;
     await adjBalCloud(account_id, is_lent ? -Number(principal) : +Number(principal));
+    return data;
+  },
+  async updateLoan(id, patch) {
+    const { data: old } = await supabase.from("loans").select("is_lent,principal,account_id").eq("id", id).single();
+    const lent = old?.is_lent;
+    const { data, error } = await supabase.from("loans")
+      .update({ counterparty: patch.counterparty || "", principal: patch.principal,
+        account_id: patch.account_id ?? old?.account_id ?? null, note: patch.note || "",
+        started_on: patch.started_on, due_on: patch.due_on || null })
+      .eq("id", id).select().single();
+    if (error) throw error;
+    if (old) await adjBalCloud(old.account_id, lent ? +Number(old.principal) : -Number(old.principal)); // reverse old
+    await adjBalCloud(data.account_id, lent ? -Number(data.principal) : +Number(data.principal));        // apply new
     return data;
   },
   async deleteLoan(id) {

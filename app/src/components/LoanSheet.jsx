@@ -5,6 +5,7 @@ import { CURRENCY, todayISO } from "../lib/format.js";
 // Add a loan (lent out / borrowed) or record a repayment against an existing loan.
 export default function LoanSheet({ open, mode, loan, accounts = [], onClose, onSaved }) {
   const repaying = mode === "repay";
+  const editing = mode === "edit";
   const [isLent, setIsLent] = useState(true);
   const [counterparty, setCounterparty] = useState("");
   const [amount, setAmount] = useState("");
@@ -18,14 +19,24 @@ export default function LoanSheet({ open, mode, loan, accounts = [], onClose, on
   useEffect(() => {
     if (!open) return;
     setErr(false);
-    setIsLent(true);
-    setCounterparty("");
-    setAmount("");
-    setAccId(accounts[0]?.id ?? null);
-    setDate(todayISO());
-    setDueOn("");
-    setNote("");
-  }, [open, mode, loan, accounts]);
+    if (editing && loan) {
+      setIsLent(!!loan.is_lent);
+      setCounterparty(loan.counterparty || "");
+      setAmount(String(loan.principal ?? ""));
+      setAccId(loan.account_id ?? null);
+      setDate(loan.started_on || todayISO());
+      setDueOn(loan.due_on || "");
+      setNote(loan.note || "");
+    } else {
+      setIsLent(true);
+      setCounterparty("");
+      setAmount("");
+      setAccId(accounts[0]?.id ?? null);
+      setDate(todayISO());
+      setDueOn("");
+      setNote("");
+    }
+  }, [open, mode, loan, accounts, editing]);
 
   const isoMinus = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 
@@ -37,6 +48,11 @@ export default function LoanSheet({ open, mode, loan, accounts = [], onClose, on
     try {
       if (repaying) {
         await api.addRepayment({ loan_id: loan.id, amount: amt, account_id: accId, note: note.trim(), paid_on: date });
+      } else if (editing) {
+        await api.updateLoan(loan.id, {
+          counterparty: counterparty.trim(), principal: amt,
+          account_id: accId, note: note.trim(), started_on: date, due_on: dueOn || null,
+        });
       } else {
         await api.addLoan({
           is_lent: isLent, counterparty: counterparty.trim(), principal: amt,
@@ -50,7 +66,7 @@ export default function LoanSheet({ open, mode, loan, accounts = [], onClose, on
 
   const title = repaying
     ? `Repay ${loan?.is_lent ? "loan to" : "loan from"} ${loan?.counterparty || ""}`.trim()
-    : "Add loan";
+    : editing ? "Edit loan" : "Add loan";
 
   return (
     <>
@@ -59,7 +75,7 @@ export default function LoanSheet({ open, mode, loan, accounts = [], onClose, on
         <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">×</button>
         <div className="grab" />
 
-        {!repaying && (
+        {!repaying && !editing && (
           <div className="seg">
             <button className={isLent ? "on" : ""} onClick={() => setIsLent(true)}>🤝 We lent out</button>
             <button className={!isLent ? "on" : ""} onClick={() => setIsLent(false)}>💳 We borrowed</button>
@@ -129,7 +145,7 @@ export default function LoanSheet({ open, mode, loan, accounts = [], onClose, on
           placeholder={repaying ? "e.g. 2nd installment" : "e.g. emergency cash"} />
 
         <button className="btn" onClick={save} disabled={busy}>
-          {busy ? "Saving…" : repaying ? "Record repayment" : isLent ? "Add loan we gave" : "Add loan we owe"}
+          {busy ? "Saving…" : repaying ? "Record repayment" : editing ? "Save changes" : isLent ? "Add loan we gave" : "Add loan we owe"}
         </button>
         <button className="btn ghost" onClick={onClose}>Cancel</button>
       </div>

@@ -8,6 +8,7 @@ export default function Loans({ accounts = [], refreshKey, onChange }) {
   const [sheet, setSheet] = useState({ open: false, mode: "add", loan: null });
   const [expanded, setExpanded] = useState(null);     // loan id whose repayments are shown
   const [reps, setReps] = useState([]);               // repayments of the expanded loan
+  const [showSettled, setShowSettled] = useState(false); // reveal fully-repaid loans
   const [tick, setTick] = useState(0);                // local refresh after mutations
 
   useEffect(() => {
@@ -46,57 +47,77 @@ export default function Loans({ accounts = [], refreshKey, onChange }) {
   const owed = loans.filter((l) => !l.is_lent);
   const sumOut = (arr) => arr.reduce((s, l) => s + Number(l.outstanding || 0), 0);
 
-  const Group = ({ title, items, emptyText }) => (
-    <>
-      <div className="section-h">
-        {title}
-        {items.length > 0 && <span className="pill">{fmt(sumOut(items))}</span>}
-      </div>
-      <div className="card" style={{ padding: "6px 16px" }}>
-        {items.length === 0 ? (
-          <div className="hint" style={{ padding: "10px 0" }}>{emptyText}</div>
-        ) : items.map((l) => {
-          const pct = l.principal > 0 ? Math.min(100, (l.repaid / l.principal) * 100) : 0;
-          const settled = l.outstanding <= 0;
-          return (
-            <div className="loan-row" key={l.id}>
-              <div className="loan-head">
-                <button className="loan-main" onClick={() => toggleExpand(l.id)}>
-                  <div className="t1">
-                    {l.counterparty || "—"}
-                    {settled && <span className="pill" style={{ marginLeft: 6 }}>settled</span>}
-                    {l.due_on && !settled && <span className="hint" style={{ marginLeft: 6 }}>due {l.due_on}</span>}
-                  </div>
-                  <div className="t2">{fmt(l.outstanding)} left · of {fmt(l.principal)}</div>
-                </button>
-                <div className="loan-actions">
-                  {!settled && <button className="mini-btn" onClick={() => setSheet({ open: true, mode: "repay", loan: l })}>Repay</button>}
-                  <button className="x" onClick={() => delLoan(l.id)}>✕</button>
-                </div>
-              </div>
-              <div className="bar-track" style={{ marginTop: 6 }}>
-                <div className="bar-fill" style={{ width: pct + "%", background: settled ? "var(--brand)" : "var(--warn)" }} />
-              </div>
-              {expanded === l.id && (
-                <div style={{ marginTop: 8 }}>
-                  {reps.length === 0 ? (
-                    <div className="hint" style={{ padding: "4px 0" }}>No repayments yet.</div>
-                  ) : reps.map((r) => (
-                    <div className="mgr-row" key={r.id} style={{ padding: "7px 0" }}>
-                      <div className="nm" style={{ fontSize: 13 }}>{fmt(r.amount)}
-                        <div className="hint" style={{ margin: 0 }}>{r.paid_on}{r.note ? " · " + r.note : ""}</div>
-                      </div>
-                      <button className="x" onClick={() => delRepayment(r.id)}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
+  const LoanRow = (l) => {
+    const pct = l.principal > 0 ? Math.min(100, (l.repaid / l.principal) * 100) : 0;
+    const settled = l.outstanding <= 0;
+    return (
+      <div className="loan-row" key={l.id}>
+        <div className="loan-head">
+          <button className="loan-main" onClick={() => toggleExpand(l.id)}>
+            <div className="t1">
+              {l.counterparty || "—"}
+              {settled && <span className="pill" style={{ marginLeft: 6 }}>settled</span>}
+              {l.due_on && !settled && <span className="hint" style={{ marginLeft: 6 }}>due {l.due_on}</span>}
             </div>
-          );
-        })}
+            <div className="t2">{fmt(l.outstanding)} left · of {fmt(l.principal)}</div>
+          </button>
+          <div className="loan-actions">
+            {!settled && <button className="mini-btn" onClick={() => setSheet({ open: true, mode: "repay", loan: l })}>Repay</button>}
+            <button className="mini-btn ghost" onClick={() => setSheet({ open: true, mode: "edit", loan: l })}>Edit</button>
+            <button className="x" onClick={() => delLoan(l.id)}>✕</button>
+          </div>
+        </div>
+        <div className="bar-track" style={{ marginTop: 6 }}>
+          <div className="bar-fill" style={{ width: pct + "%", background: settled ? "var(--brand)" : "var(--warn)" }} />
+        </div>
+        {expanded === l.id && (
+          <div style={{ marginTop: 8 }}>
+            {reps.length === 0 ? (
+              <div className="hint" style={{ padding: "4px 0" }}>No repayments yet.</div>
+            ) : reps.map((r) => (
+              <div className="mgr-row" key={r.id} style={{ padding: "7px 0" }}>
+                <div className="nm" style={{ fontSize: 13 }}>{fmt(r.amount)}
+                  <div className="hint" style={{ margin: 0 }}>{r.paid_on}{r.note ? " · " + r.note : ""}</div>
+                </div>
+                <button className="x" onClick={() => delRepayment(r.id)}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </>
-  );
+    );
+  };
+
+  const Group = ({ title, items, emptyText }) => {
+    const active = items.filter((l) => l.outstanding > 0);
+    const settledItems = items.filter((l) => l.outstanding <= 0);
+    return (
+      <>
+        <div className="section-h">
+          {title}
+          {items.length > 0 && <span className="pill">{fmt(sumOut(items))}</span>}
+        </div>
+        <div className="card" style={{ padding: "6px 16px" }}>
+          {items.length === 0 ? (
+            <div className="hint" style={{ padding: "10px 0" }}>{emptyText}</div>
+          ) : (
+            <>
+              {active.length === 0 && !showSettled && (
+                <div className="hint" style={{ padding: "10px 0" }}>All settled here. 🎉</div>
+              )}
+              {active.map(LoanRow)}
+              {showSettled && settledItems.map(LoanRow)}
+              {settledItems.length > 0 && (
+                <button className="link-btn" style={{ padding: "10px 0" }} onClick={() => setShowSettled((s) => !s)}>
+                  {showSettled ? "Hide settled" : `Show settled (${settledItems.length})`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </>
+    );
+  };
 
   return (
     <>

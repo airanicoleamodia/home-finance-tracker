@@ -87,6 +87,8 @@ nav.tabs button.active{color:var(--brand)}
 .loan-main .t2{font-size:12.5px;color:var(--muted);margin-top:2px}
 .loan-actions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
 .mini-btn{border:none;background:var(--brand);color:#fff;font-weight:700;font-size:12.5px;padding:6px 12px;border-radius:9px;cursor:pointer}
+.mini-btn.ghost{background:#f1f4f3;color:var(--ink)}
+.link-btn{display:block;width:100%;text-align:center;border:none;background:none;color:var(--brand);font-weight:700;font-size:13px;cursor:pointer}
 .fab{position:fixed;bottom:74px;right:max(18px,calc(50% - 240px + 18px));z-index:31;width:58px;height:58px;border-radius:50%;background:var(--brand);color:#fff;border:none;font-size:30px;line-height:1;box-shadow:0 8px 20px rgba(15,118,110,.4);cursor:pointer}
 .scrim{position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.open{opacity:1;pointer-events:auto}
