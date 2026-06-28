@@ -9,6 +9,7 @@ export default function Loans({ accounts = [], refreshKey, onChange }) {
   const [expanded, setExpanded] = useState(null);     // loan id whose repayments are shown
   const [reps, setReps] = useState([]);               // repayments of the expanded loan
   const [showSettled, setShowSettled] = useState(false); // reveal fully-repaid loans
+  const [actionsFor, setActionsFor] = useState(null); // loan id whose action buttons are revealed
   const [tick, setTick] = useState(0);                // local refresh after mutations
 
   useEffect(() => {
@@ -62,9 +63,15 @@ export default function Loans({ accounts = [], refreshKey, onChange }) {
             <div className="t2">{fmt(l.outstanding)} left · of {fmt(l.principal)}</div>
           </button>
           <div className="loan-actions">
-            {!settled && <button className="mini-btn" onClick={() => setSheet({ open: true, mode: "repay", loan: l })}>Repay</button>}
-            <button className="mini-btn ghost" onClick={() => setSheet({ open: true, mode: "edit", loan: l })}>Edit</button>
-            <button className="x" onClick={() => delLoan(l.id)}>✕</button>
+            {actionsFor === l.id ? (
+              <>
+                {!settled && <button className="mini-btn" onClick={() => { setActionsFor(null); setSheet({ open: true, mode: "repay", loan: l }); }}>Repay</button>}
+                <button className="mini-btn ghost" onClick={() => { setActionsFor(null); setSheet({ open: true, mode: "edit", loan: l }); }}>Edit</button>
+                <button className="mini-btn danger" onClick={() => { setActionsFor(null); delLoan(l.id); }}>Delete</button>
+              </>
+            ) : (
+              <button className="kebab" aria-label="Show actions" onClick={() => setActionsFor(l.id)}>⋯</button>
+            )}
           </div>
         </div>
         <div className="bar-track" style={{ marginTop: 6 }}>
