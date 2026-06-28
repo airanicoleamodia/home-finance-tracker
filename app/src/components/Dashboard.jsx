@@ -242,9 +242,11 @@ const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 function DailyBars({ refreshKey }) {
   const [endDay, setEndDay] = useState(todayISO());
   const [days, setDays] = useState(null);
+  const [sel, setSel] = useState(null); // index of the tapped bar, or null
 
   useEffect(() => {
     let on = true;
+    setSel(null); // selection is stale once the window/data changes
     api.getDailyTotals(endDay, 7)
       .then((d) => on && setDays(d))
       .catch(() => on && setDays([]));
@@ -280,9 +282,19 @@ function DailyBars({ refreshKey }) {
                 const x = pad + i * bw;
                 const h = (d.expense / max) * (H - 42);
                 const bar = bw * 0.5;
+                const isSel = sel === i;
                 return (
-                  <g key={i}>
-                    <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="#0f766e" />
+                  <g key={i} onClick={() => setSel((s) => (s === i ? null : i))} style={{ cursor: "pointer" }}>
+                    <title>{fmt(d.expense)}</title>
+                    {/* transparent full-height hit target so short/zero bars stay tappable */}
+                    <rect x={x} y={H - 22 - (H - 42)} width={bw} height={H - 42} fill="transparent" />
+                    <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="#0f766e"
+                      fillOpacity={sel == null || isSel ? 1 : 0.45} />
+                    {isSel && (
+                      <text x={x + bw * 0.5} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="#0f172a">
+                        {fmt(d.expense)}
+                      </text>
+                    )}
                     <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="#6b7a77">
                       {WEEKDAYS[new Date(d.day + "T00:00:00").getDay()]}
                     </text>
@@ -301,6 +313,8 @@ function DailyBars({ refreshKey }) {
 }
 
 function WeeklyBars({ expenses, monthKey }) {
+  const [sel, setSel] = useState(null); // index of the tapped bar, or null
+  useEffect(() => { setSel(null); }, [monthKey]); // clear stale selection on month change
   const weeks = weeklyExpenseTotals(expenses, monthKey);
   const total = weeks.reduce((s, w) => s + w.total, 0);
   if (total <= 0) {
@@ -319,9 +333,19 @@ function WeeklyBars({ expenses, monthKey }) {
           const x = pad + i * bw;
           const h = (w.total / max) * (H - 42);
           const bar = bw * 0.5;
+          const isSel = sel === i;
           return (
-            <g key={i}>
-              <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="#0f766e" />
+            <g key={i} onClick={() => setSel((s) => (s === i ? null : i))} style={{ cursor: "pointer" }}>
+              <title>{fmt(w.total)}</title>
+              {/* transparent full-height hit target so short/zero bars stay tappable */}
+              <rect x={x} y={H - 22 - (H - 42)} width={bw} height={H - 42} fill="transparent" />
+              <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="#0f766e"
+                fillOpacity={sel == null || isSel ? 1 : 0.45} />
+              {isSel && (
+                <text x={x + bw * 0.5} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="#0f172a">
+                  {fmt(w.total)}
+                </text>
+              )}
               <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="#6b7a77">{w.label}</text>
             </g>
           );
@@ -335,9 +359,29 @@ function WeeklyBars({ expenses, monthKey }) {
 }
 
 function Trend({ trend }) {
+  const [sel, setSel] = useState(null); // composite key "i:income" / "i:expense", or null
+  useEffect(() => { setSel(null); }, [trend]); // clear stale selection when data changes
   if (!trend || !trend.length) return null;
   const max = Math.max(1, ...trend.map((t) => Math.max(t.income, t.expense)));
   const W = 320, H = 140, pad = 22, bw = (W - pad * 2) / trend.length;
+  const w = bw * 0.32;
+  // One tappable bar: its own transparent hit target, value label on select, and dimming.
+  const Bar = ({ bx, h, fill, value, k }) => {
+    const isSel = sel === k;
+    return (
+      <g onClick={() => setSel((s) => (s === k ? null : k))} style={{ cursor: "pointer" }}>
+        <title>{fmt(value)}</title>
+        <rect x={bx} y={H - 22 - (H - 42)} width={w} height={H - 42} fill="transparent" />
+        <rect x={bx} y={H - 22 - h} width={w} height={h} rx="3" fill={fill}
+          fillOpacity={sel == null || isSel ? 1 : 0.45} />
+        {isSel && (
+          <text x={bx + w / 2} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="#0f172a">
+            {fmt(value)}
+          </text>
+        )}
+      </g>
+    );
+  };
   return (
     <div className="card" style={{ padding: 14 }}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="150" role="img" aria-label="Income vs expense trend">
@@ -345,11 +389,10 @@ function Trend({ trend }) {
           const x = pad + i * bw;
           const ih = (t.income / max) * (H - 42);
           const eh = (t.expense / max) * (H - 42);
-          const w = bw * 0.32;
           return (
             <g key={i}>
-              <rect x={x + bw * 0.18} y={H - 22 - ih} width={w} height={ih} rx="3" fill="#0f766e" />
-              <rect x={x + bw * 0.5} y={H - 22 - eh} width={w} height={eh} rx="3" fill="#cbd5d2" />
+              <Bar bx={x + bw * 0.18} h={ih} fill="#0f766e" value={t.income} k={`${i}:income`} />
+              <Bar bx={x + bw * 0.5} h={eh} fill="#cbd5d2" value={t.expense} k={`${i}:expense`} />
               <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="#6b7a77">
                 {MONTHS[(t.month.split("-")[1] - 1)].slice(0, 1)}
               </text>
