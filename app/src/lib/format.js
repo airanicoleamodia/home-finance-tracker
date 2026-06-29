@@ -43,6 +43,10 @@ export const shiftISO = (dayISO, delta) => {
   );
 };
 
+// Sunday that starts the week containing `dayISO` (weeks start Sunday).
+export const weekStartISO = (dayISO) =>
+  shiftISO(dayISO, -new Date(dayISO + "T00:00:00").getDay());
+
 export const PALETTE = [
   "#0f766e", "#2563eb", "#d97706", "#dc2626", "#7c3aed",
   "#059669", "#0891b2", "#db2777", "#9333ea", "#65a30d",

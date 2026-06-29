@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, weeklyExpenseTotals } from "../lib/store.js";
-import { fmt, ymKey, MONTHS, PALETTE, hexA, todayISO, shiftISO } from "../lib/format.js";
+import { api } from "../lib/store.js";
+import { fmt, ymKey, MONTHS, PALETTE, hexA, todayISO, shiftISO, weekStartISO } from "../lib/format.js";
 import { SkeletonList } from "../ui/Skeleton.jsx";
 import AccountSheet from "./AccountSheet.jsx";
 
@@ -97,13 +97,14 @@ export default function Dashboard({ cur, categories, refreshKey }) {
 
           <div className="section-h">Spending by account</div>
           <SpendByAccount expenses={expenses} accounts={accounts} />
-
-          <div className="section-h">Weekly spending</div>
-          <WeeklyBars expenses={expenses} monthKey={monthKey} />
         </>
       )}
 
-      {/* Daily spending — rolling 7-day window, independent of the selected month */}
+      {/* Weekly spending — rolling 5 Sunday-start weeks, independent of the selected month */}
+      <div className="section-h">Weekly spending</div>
+      <WeeklyBars refreshKey={refreshKey} />
+
+      {/* Daily spending — current Sunday-start week, independent of the selected month */}
       <div className="section-h">Daily spending</div>
       <DailyBars refreshKey={refreshKey} />
 
@@ -238,12 +239,15 @@ function SpendByAccount({ expenses, accounts }) {
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
-// Rolling 7-day spending chart. Defaults to the week ending today and lets you
-// page back a week at a time (forward is capped at today).
+// Spending for one Sunday-start calendar week (Sun → Sat). Defaults to the
+// current week and lets you page back a week at a time (forward is capped at
+// the current week).
 function DailyBars({ refreshKey }) {
-  const [endDay, setEndDay] = useState(todayISO());
+  const [weekStart, setWeekStart] = useState(weekStartISO(todayISO()));
   const [days, setDays] = useState(null);
   const [sel, setSel] = useState(null); // index of the tapped bar, or null
+
+  const endDay = shiftISO(weekStart, 6); // Saturday
 
   useEffect(() => {
     let on = true;
@@ -254,17 +258,16 @@ function DailyBars({ refreshKey }) {
     return () => { on = false; };
   }, [endDay, refreshKey]);
 
-  const atToday = endDay >= todayISO();
+  const atCurrentWeek = weekStart >= weekStartISO(todayISO());
   const dayLabel = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`; };
-  const startDay = shiftISO(endDay, -6);
 
   return (
     <div className="card" style={{ padding: 14 }}>
       <div className="month" style={{ marginTop: 0 }}>
-        <button onClick={() => setEndDay((x) => shiftISO(x, -7))} aria-label="Previous 7 days">‹</button>
-        <div className="label">{dayLabel(startDay)} – {dayLabel(endDay)}</div>
-        <button onClick={() => setEndDay((x) => shiftISO(x, 7))} disabled={atToday} aria-label="Next 7 days"
-          style={atToday ? { opacity: 0.4, cursor: "default" } : undefined}>›</button>
+        <button onClick={() => setWeekStart((x) => shiftISO(x, -7))} aria-label="Previous week">‹</button>
+        <div className="label">{dayLabel(weekStart)} – {dayLabel(endDay)}</div>
+        <button onClick={() => setWeekStart((x) => shiftISO(x, 7))} disabled={atCurrentWeek} aria-label="Next week"
+          style={atCurrentWeek ? { opacity: 0.4, cursor: "default" } : undefined}>›</button>
       </div>
 
       {days === null ? (
@@ -313,48 +316,85 @@ function DailyBars({ refreshKey }) {
   );
 }
 
-function WeeklyBars({ expenses, monthKey }) {
+// Spending grouped into 5 Sunday-start weeks (Sun → Sat). Defaults to the block
+// ending at the current week and pages 5 weeks at a time (forward is capped at
+// the current week). Independent of the selected month.
+function WeeklyBars({ refreshKey }) {
+  const [endWeekStart, setEndWeekStart] = useState(weekStartISO(todayISO()));
+  const [weeks, setWeeks] = useState(null);
   const [sel, setSel] = useState(null); // index of the tapped bar, or null
-  useEffect(() => { setSel(null); }, [monthKey]); // clear stale selection on month change
-  const weeks = weeklyExpenseTotals(expenses, monthKey);
-  const total = weeks.reduce((s, w) => s + w.total, 0);
-  if (total <= 0) {
-    return (
-      <div className="card" style={{ padding: 14 }}>
-        <div className="hint" style={{ padding: "6px 0" }}>No expenses to chart this month.</div>
-      </div>
-    );
-  }
-  const max = Math.max(1, ...weeks.map((w) => w.total));
-  const W = 320, H = 140, pad = 22, bw = (W - pad * 2) / weeks.length;
+
+  const firstDay = shiftISO(endWeekStart, -28); // Sunday of the oldest of the 5 weeks
+  const lastDay = shiftISO(endWeekStart, 6);    // Saturday of the most recent week
+
+  useEffect(() => {
+    let on = true;
+    setSel(null); // selection is stale once the window/data changes
+    api.getDailyTotals(lastDay, 35)
+      .then((d) => {
+        if (!on) return;
+        // d is 35 days oldest→newest; bucket into 5 consecutive Sunday-start weeks.
+        setWeeks(Array.from({ length: 5 }, (_, i) => {
+          const slice = d.slice(i * 7, i * 7 + 7);
+          return { start: slice[0].day, total: slice.reduce((s, x) => s + x.expense, 0) };
+        }));
+      })
+      .catch(() => on && setWeeks([]));
+    return () => { on = false; };
+  }, [lastDay, refreshKey]);
+
+  const atCurrentWeek = endWeekStart >= weekStartISO(todayISO());
+  const dayLabel = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`; };
+
   return (
     <div className="card" style={{ padding: 14 }}>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="150" role="img" aria-label="Weekly spending">
-        {weeks.map((w, i) => {
-          const x = pad + i * bw;
-          const h = (w.total / max) * (H - 42);
-          const bar = bw * 0.5;
-          const isSel = sel === i;
-          return (
-            <g key={i} onClick={() => setSel((s) => (s === i ? null : i))} style={{ cursor: "pointer" }}>
-              <title>{fmt(w.total)}</title>
-              {/* transparent full-height hit target so short/zero bars stay tappable */}
-              <rect x={x} y={H - 22 - (H - 42)} width={bw} height={H - 42} fill="transparent" />
-              <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="var(--brand)"
-                fillOpacity={sel == null || isSel ? 1 : 0.45} />
-              {isSel && (
-                <text x={x + bw * 0.5} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--ink)">
-                  {fmt(w.total)}
-                </text>
-              )}
-              <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--muted)">{w.label}</text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="legend-inline">
-        <span><i style={{ background: "var(--brand)" }} /> Spent · {fmt(total)}</span>
+      <div className="month" style={{ marginTop: 0 }}>
+        <button onClick={() => setEndWeekStart((x) => shiftISO(x, -35))} aria-label="Previous 5 weeks">‹</button>
+        <div className="label">{dayLabel(firstDay)} – {dayLabel(lastDay)}</div>
+        <button onClick={() => setEndWeekStart((x) => shiftISO(x, 35))} disabled={atCurrentWeek} aria-label="Next 5 weeks"
+          style={atCurrentWeek ? { opacity: 0.4, cursor: "default" } : undefined}>›</button>
       </div>
+
+      {weeks === null ? (
+        <div className="center" style={{ padding: "20px 0" }}>Loading…</div>
+      ) : (() => {
+        const total = weeks.reduce((s, w) => s + w.total, 0);
+        if (total <= 0) {
+          return <div className="hint" style={{ padding: "10px 0 2px" }}>No spending in these 5 weeks.</div>;
+        }
+        const max = Math.max(1, ...weeks.map((w) => w.total));
+        const W = 320, H = 140, pad = 22, bw = (W - pad * 2) / weeks.length;
+        return (
+          <>
+            <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="150" role="img" aria-label="Weekly spending">
+              {weeks.map((w, i) => {
+                const x = pad + i * bw;
+                const h = (w.total / max) * (H - 42);
+                const bar = bw * 0.5;
+                const isSel = sel === i;
+                return (
+                  <g key={i} onClick={() => setSel((s) => (s === i ? null : i))} style={{ cursor: "pointer" }}>
+                    <title>{fmt(w.total)}</title>
+                    {/* transparent full-height hit target so short/zero bars stay tappable */}
+                    <rect x={x} y={H - 22 - (H - 42)} width={bw} height={H - 42} fill="transparent" />
+                    <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="var(--brand)"
+                      fillOpacity={sel == null || isSel ? 1 : 0.45} />
+                    {isSel && (
+                      <text x={x + bw * 0.5} y={H - 22 - h - 4} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--ink)">
+                        {fmt(w.total)}
+                      </text>
+                    )}
+                    <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--muted)">{dayLabel(w.start)}</text>
+                  </g>
+                );
+              })}
+            </svg>
+            <div className="legend-inline">
+              <span><i style={{ background: "var(--brand)" }} /> Spent · {fmt(total)}</span>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
