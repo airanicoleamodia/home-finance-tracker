@@ -336,7 +336,7 @@ function WeeklyBars({ refreshKey }) {
         // d is 35 days oldest→newest; bucket into 5 consecutive Sunday-start weeks.
         setWeeks(Array.from({ length: 5 }, (_, i) => {
           const slice = d.slice(i * 7, i * 7 + 7);
-          return { start: slice[0].day, total: slice.reduce((s, x) => s + x.expense, 0) };
+          return { start: slice[0].day, end: slice[6].day, total: slice.reduce((s, x) => s + x.expense, 0) };
         }));
       })
       .catch(() => on && setWeeks([]));
@@ -345,6 +345,9 @@ function WeeklyBars({ refreshKey }) {
 
   const atCurrentWeek = endWeekStart >= weekStartISO(todayISO());
   const dayLabel = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`; };
+  const dayNum = (iso) => new Date(iso + "T00:00:00").getDate();
+  const monthOf = (iso) => iso.slice(5, 7);
+  const rangeLabel = (w) => `${dayLabel(w.start)} – ${dayLabel(w.end)}`;
 
   return (
     <div className="card" style={{ padding: 14 }}>
@@ -374,7 +377,7 @@ function WeeklyBars({ refreshKey }) {
                 const isSel = sel === i;
                 return (
                   <g key={i} onClick={() => setSel((s) => (s === i ? null : i))} style={{ cursor: "pointer" }}>
-                    <title>{fmt(w.total)}</title>
+                    <title>{rangeLabel(w)} · {fmt(w.total)}</title>
                     {/* transparent full-height hit target so short/zero bars stay tappable */}
                     <rect x={x} y={H - 22 - (H - 42)} width={bw} height={H - 42} fill="transparent" />
                     <rect x={x + (bw - bar) / 2} y={H - 22 - h} width={bar} height={h} rx="3" fill="var(--brand)"
@@ -384,13 +387,17 @@ function WeeklyBars({ refreshKey }) {
                         {fmt(w.total)}
                       </text>
                     )}
-                    <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--muted)">{dayLabel(w.start)}</text>
+                    {/* month shown only on the first bar and when it changes, else just the day number */}
+                    <text x={x + bw * 0.5} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--muted)">
+                      {i === 0 || monthOf(w.start) !== monthOf(weeks[i - 1].start) ? dayLabel(w.start) : dayNum(w.start)}
+                    </text>
                   </g>
                 );
               })}
             </svg>
             <div className="legend-inline">
-              <span><i style={{ background: "var(--brand)" }} /> Spent · {fmt(total)}</span>
+              <span><i style={{ background: "var(--brand)" }} />{" "}
+                {sel == null ? `Spent · ${fmt(total)}` : `${rangeLabel(weeks[sel])} · ${fmt(weeks[sel].total)}`}</span>
             </div>
           </>
         );
