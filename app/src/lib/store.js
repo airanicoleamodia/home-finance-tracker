@@ -420,12 +420,13 @@ const localApi = {
 // =====================================================================
 //  CLOUD MODE implementation (Supabase)
 // =====================================================================
-const monthStart = (monthKey) => monthKey + "-01";
-function monthEnd(monthKey) {
-  const [y, m] = monthKey.split("-").map(Number);
-  const d = new Date(y, m, 1); // first day of NEXT month
-  return d.toISOString().slice(0, 10);
-}
+// Month range as half-open [start, end): start = 1st of the month, end = 1st of
+// the NEXT month. We build `end` via the timezone-safe addMonthKey() instead of
+// new Date(...).toISOString(), which would shift the date to UTC and (east of
+// UTC) return the last day of the current month — dropping that day from every
+// month view. Exported so the boundary math can be unit-tested.
+export const monthStart = (monthKey) => monthKey + "-01";
+export const monthEnd = (monthKey) => addMonthKey(monthKey, 1) + "-01";
 
 const cloudApi = {
   async getSession() {

@@ -30,17 +30,21 @@ export const MONTHS = [
 export const ymKey = (d) =>
   d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
 
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+// Format a Date as YYYY-MM-DD using its LOCAL components (not UTC). Using
+// toISOString() here would return the UTC day, which is off by one for users
+// east of UTC during their local early-morning hours.
+const isoLocal = (d) =>
+  d.getFullYear() + "-" +
+  String(d.getMonth() + 1).padStart(2, "0") + "-" +
+  String(d.getDate()).padStart(2, "0");
+
+export const todayISO = () => isoLocal(new Date());
 
 // Shift a YYYY-MM-DD day string by `delta` days (local time, DST-safe).
 export const shiftISO = (dayISO, delta) => {
   const d = new Date(dayISO + "T00:00:00");
   d.setDate(d.getDate() + delta);
-  return (
-    d.getFullYear() + "-" +
-    String(d.getMonth() + 1).padStart(2, "0") + "-" +
-    String(d.getDate()).padStart(2, "0")
-  );
+  return isoLocal(d);
 };
 
 // Sunday that starts the week containing `dayISO` (weeks start Sunday).

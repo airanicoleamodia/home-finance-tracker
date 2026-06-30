@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { api, MODE, expandRecurring, expandRecurringExp } from "./store.js";
+import { api, MODE, expandRecurring, expandRecurringExp, monthStart, monthEnd } from "./store.js";
 
 // These tests exercise the LOCAL-MODE data layer. Supabase env vars are absent
 // in the test environment, so MODE === "local" and `api` is the localApi.
@@ -7,6 +7,24 @@ import { api, MODE, expandRecurring, expandRecurringExp } from "./store.js";
 describe("environment", () => {
   it("runs in local mode (no Supabase env vars)", () => {
     expect(MODE).toBe("local");
+  });
+});
+
+// Regression: the cloud-mode month query uses [monthStart, monthEnd). monthEnd
+// must be the 1st of the NEXT month. A previous toISOString()-based version
+// returned the LAST day of the current month for users east of UTC, so the
+// query dropped that day — expenses logged on e.g. June 30 saved but vanished
+// from the app. These assertions are timezone-independent.
+describe("month range boundaries (timezone-safe)", () => {
+  it("monthStart is the 1st of the month", () => {
+    expect(monthStart("2026-06")).toBe("2026-06-01");
+  });
+  it("monthEnd is the 1st of the next month, never the last day", () => {
+    expect(monthEnd("2026-06")).toBe("2026-07-01");
+    expect(monthEnd("2026-02")).toBe("2026-03-01");
+  });
+  it("monthEnd rolls over the year in December", () => {
+    expect(monthEnd("2026-12")).toBe("2027-01-01");
   });
 });
 

@@ -33,13 +33,23 @@ const PESO = "₱";
 const money = (n) => PESO + Number(n || 0).toLocaleString("en-PH", { maximumFractionDigits: 2 });
 
 // ---- helpers ---------------------------------------------------------
+// Today as YYYY-MM-DD in the server's LOCAL time. Avoids toISOString(), which
+// returns the UTC day and can be off by one near midnight. Set TZ on the host
+// (e.g. TZ=Asia/Manila) so this matches the household's calendar day.
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function monthBounds(month) {
   // month: "YYYY-MM" (defaults to current month)
   const now = new Date();
   const key = month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const [y, m] = key.split("-").map(Number);
   const start = `${key}-01`;
-  const end = new Date(y, m, 1).toISOString().slice(0, 10); // 1st of next month
+  // 1st of next month, built by pure month arithmetic so it is never shifted to
+  // UTC (toISOString() east of UTC would yield the last day of THIS month).
+  const end = (m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`) + "-01";
   return { key, start, end };
 }
 
@@ -277,7 +287,7 @@ async function addExpense(a) {
     category_id: cat ? cat.id : null,
     paid_by: person ? person.id : (DEFAULT_PROFILE_ID || null),
     note: a.note || "",
-    spent_on: a.date || new Date().toISOString().slice(0, 10),
+    spent_on: a.date || todayISO(),
     created_by: DEFAULT_PROFILE_ID || null,
   };
   const { data, error } = await db.from("expenses").insert(row).select().single();
@@ -343,7 +353,7 @@ async function addIncome2(a) {
   const row = {
     household_id: HH, amount: a.amount, source: a.source || "Income",
     received_by: person ? person.id : (DEFAULT_PROFILE_ID || null),
-    note: a.note || "", received_on: a.date || new Date().toISOString().slice(0, 10),
+    note: a.note || "", received_on: a.date || todayISO(),
   };
   const { data, error } = await db.from("income").insert(row).select().single();
   if (error) throw error;
@@ -355,7 +365,7 @@ async function addRecurringIncome2(a) {
   if (!(a.day_of_month >= 1 && a.day_of_month <= 31)) return fail("day_of_month must be 1-31.");
   const mem = await memberMap();
   const person = a.person ? mem.byName[a.person.toLowerCase()] : null;
-  const monthStart = new Date().toISOString().slice(0, 8) + "01";
+  const monthStart = monthBounds().start; // 1st of the current month (local time)
   const row = {
     household_id: HH, amount: a.amount, source: a.source || "Salary",
     day_of_month: a.day_of_month, received_by: person ? person.id : (DEFAULT_PROFILE_ID || null),
